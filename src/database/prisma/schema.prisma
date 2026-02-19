@@ -1,0 +1,283 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ──────────────────────────────────────
+
+enum UserType {
+  RESIDENTIAL
+  BUSINESS
+}
+
+enum UserRole {
+  USER
+  COLLECTOR
+  ADMIN
+}
+
+enum WasteType {
+  ORGANIC
+  RECYCLABLE
+  GENERAL
+  EWASTE
+  GLASS
+  HAZARDOUS
+}
+
+enum PickupStatus {
+  PENDING
+  CONFIRMED
+  COLLECTOR_ASSIGNED
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TimeSlot {
+  MORNING_8_10
+  MORNING_10_12
+  AFTERNOON_2_4
+  AFTERNOON_4_6
+}
+
+enum PaymentMethod {
+  MTN_MOMO
+  AIRTEL_MONEY
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum EcoTier {
+  ECO_STARTER
+  ECO_WARRIOR
+  ECO_CHAMPION
+}
+
+enum NotificationType {
+  SMS
+  PUSH
+  IN_APP
+  WHATSAPP
+}
+
+enum BinStatus {
+  ACTIVE
+  FULL
+  MAINTENANCE
+  INACTIVE
+}
+
+// ─── MODELS ──────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  phone        String   @unique
+  email        String?  @unique
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  userType     UserType @default(RESIDENTIAL) @map("user_type")
+  role         UserRole @default(USER)
+  referralCode String   @unique @map("referral_code")
+  referredBy   String?  @map("referred_by")
+  avatarUrl    String?  @map("avatar_url")
+  fcmToken     String?  @map("fcm_token")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  pickups          Pickup[]
+  bins             Bin[]
+  ecoPoints        EcoPointTransaction[]
+  payments         Payment[]
+  notifications    Notification[]
+  referredUsers    User[]             @relation("Referrals")
+  referrer         User?              @relation("Referrals", fields: [referredBy], references: [id])
+  collectorProfile CollectorProfile?
+  refreshTokens    RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  phone     String
+  otp       String
+  expiresAt DateTime @map("expires_at")
+  verified  Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([phone, otp])
+  @@index([phone, createdAt])
+  @@map("otp_verifications")
+}
+
+model CollectorProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  vehiclePlate String   @map("vehicle_plate")
+  zone         String
+  photoUrl     String?  @map("photo_url")
+  rating       Float    @default(5.0)
+  totalPickups Int      @default(0) @map("total_pickups")
+  isAvailable  Boolean  @default(true) @map("is_available")
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pickups Pickup[]
+
+  @@map("collector_profiles")
+}
+
+model Pickup {
+  id            String       @id @default(uuid())
+  reference     String       @unique
+  userId        String       @map("user_id")
+  collectorId   String?      @map("collector_id")
+  wasteType     WasteType    @map("waste_type")
+  weightKg      Float?       @map("weight_kg")
+  scheduledDate DateTime     @map("scheduled_date")
+  timeSlot      TimeSlot     @map("time_slot")
+  status        PickupStatus @default(PENDING)
+  address       String
+  latitude      Float
+  longitude     Float
+  notes         String?
+  completedAt   DateTime?    @map("completed_at")
+  cancelledAt   DateTime?    @map("cancelled_at")
+  cancelReason  String?      @map("cancel_reason")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  user      User              @relation(fields: [userId], references: [id])
+  collector CollectorProfile? @relation(fields: [collectorId], references: [id])
+  payment   Payment?
+  bin       Bin?              @relation(fields: [binId], references: [id])
+  binId     String?           @map("bin_id")
+
+  @@index([userId])
+  @@index([collectorId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([reference])
+  @@map("pickups")
+}
+
+model Bin {
+  id          String    @id @default(uuid())
+  qrCode      String    @unique @map("qr_code")
+  userId      String    @map("user_id")
+  wasteType   WasteType @map("waste_type")
+  fillLevel   Int       @default(0) @map("fill_level")
+  status      BinStatus @default(ACTIVE)
+  latitude    Float?
+  longitude   Float?
+  lastEmptied DateTime? @map("last_emptied")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pickups Pickup[]
+
+  @@index([userId])
+  @@index([qrCode])
+  @@map("bins")
+}
+
+model EcoPointTransaction {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  points      Int
+  action      String
+  description String?
+  pickupId    String?  @map("pickup_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("eco_point_transactions")
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  pickupId       String        @unique @map("pickup_id")
+  userId         String        @map("user_id")
+  amount         Float
+  currency       String        @default("RWF")
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  transactionRef String?       @unique @map("transaction_ref")
+  externalRef    String?       @map("external_ref")
+  paidAt         DateTime?     @map("paid_at")
+  failedAt       DateTime?     @map("failed_at")
+  failReason     String?       @map("fail_reason")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  pickup Pickup @relation(fields: [pickupId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([transactionRef])
+  @@map("payments")
+}
+
+model Notification {
+  id     String           @id @default(uuid())
+  userId String           @map("user_id")
+  type   NotificationType
+  title  String
+  body   String
+  data   Json?
+  isRead Boolean          @default(false) @map("is_read")
+  sentAt DateTime         @default(now()) @map("sent_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([sentAt])
+  @@map("notifications")
+}

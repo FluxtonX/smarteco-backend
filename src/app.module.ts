@@ -1,4 +1,10 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import configuration from './config/configuration';
+import databaseConfig from './config/database.config';
+import redisConfig from './config/redis.config';
+import { validationSchema } from './config/validation.schema';
+import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PickupsModule } from './modules/pickups/pickups.module';
@@ -10,6 +16,32 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, PickupsModule, PaymentsModule, BinsModule, CollectorsModule, EcoPointsModule, NotificationsModule, AdminModule],
+  imports: [
+    // ─── Configuration ─────────────────────────────
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [configuration, databaseConfig, redisConfig],
+      validationSchema,
+      validationOptions: {
+        allowUnknown: true,
+        abortEarly: false,
+      },
+      envFilePath: ['.env'],
+    }),
+
+    // ─── Database ──────────────────────────────────
+    DatabaseModule,
+
+    // ─── Feature Modules ───────────────────────────
+    AuthModule,
+    UsersModule,
+    PickupsModule,
+    PaymentsModule,
+    BinsModule,
+    CollectorsModule,
+    EcoPointsModule,
+    NotificationsModule,
+    AdminModule,
+  ],
 })
-export class AppModule {}
+export class AppModule { }
