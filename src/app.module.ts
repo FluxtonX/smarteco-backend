@@ -5,6 +5,7 @@ import databaseConfig from './config/database.config';
 import redisConfig from './config/redis.config';
 import { validationSchema } from './config/validation.schema';
 import { DatabaseModule } from './database/database.module';
+import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PickupsModule } from './modules/pickups/pickups.module';
@@ -43,5 +44,6 @@ import { AdminModule } from './modules/admin/admin.module';
     NotificationsModule,
     AdminModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule { }
