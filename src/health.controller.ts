@@ -9,7 +9,7 @@ export class HealthController {
     @ApiResponse({ status: 200, description: 'Server is healthy' })
     check() {
         return {
-            status: 'ok',
+            status: 'OK',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             environment: process.env.NODE_ENV || 'development',
