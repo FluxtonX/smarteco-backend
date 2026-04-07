@@ -95,6 +95,7 @@ export class AuthService {
             data: {
                 expiresIn: OTP_EXPIRY_MINUTES * 60,
                 isNewUser: !existingUser,
+                otp: isDev ? otp : undefined,
             },
         };
     }
