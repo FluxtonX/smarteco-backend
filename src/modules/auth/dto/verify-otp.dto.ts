@@ -8,8 +8,8 @@ export class VerifyOtpDto {
     })
     @IsString()
     @IsNotEmpty()
-    @Matches(/^\+250\d{9}$/, {
-        message: 'Phone number must be a valid Rwandan number in format +250XXXXXXXXX',
+    @Matches(/^\+[1-9]\d{1,14}$/, {
+        message: 'Phone number must be in valid international format (e.g., +250XXXXXXXXX)',
     })
     phone: string;
 
@@ -30,10 +30,6 @@ export class VerifyOtpDto {
     @IsString()
     referralCode?: string;
 
-    @ApiPropertyOptional({
-        description: 'Firebase Cloud Messaging token for push notifications',
-        example: 'fMp6Kq...',
-    })
     @IsOptional()
     @IsString()
     fcmToken?: string;

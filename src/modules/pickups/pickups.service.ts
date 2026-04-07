@@ -54,6 +54,56 @@ export class PickupsService {
         // Estimate points for the pickup
         const estimatedPoints = this.estimatePoints(dto.wasteType);
 
+        // Ensure at least some collectors exist (for simulation)
+        let collectors = await this.prisma.collectorProfile.findMany({
+            where: { isAvailable: true },
+        });
+
+        if (collectors.length === 0) {
+            this.logger.log('No collectors found, seeding default collectors for simulation...');
+            const defaultCollectors = [
+                { phone: '+250788111222', firstName: 'Patrick', lastName: 'Mugisha', plate: 'RAD 123A', rating: 4.8, lat: 33.6844, lon: 73.0479 },
+                { phone: '+250788333444', firstName: 'Jean', lastName: 'Damascene', plate: 'RBA 456C', rating: 4.6, lat: 33.6944, lon: 73.0579 },
+            ];
+
+            for (const c of defaultCollectors) {
+                const user = await this.prisma.user.upsert({
+                    where: { phone: c.phone },
+                    update: { role: 'COLLECTOR' as any },
+                    create: {
+                        phone: c.phone,
+                        firstName: c.firstName,
+                        lastName: c.lastName,
+                        role: 'COLLECTOR' as any,
+                        referralCode: `COLL-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+                    },
+                });
+
+                await this.prisma.collectorProfile.upsert({
+                    where: { userId: user.id },
+                    update: { isAvailable: true, latitude: c.lat, longitude: c.lon },
+                    create: {
+                        userId: user.id,
+                        vehiclePlate: c.plate,
+                        zone: 'Kigali',
+                        rating: c.rating,
+                        latitude: c.lat,
+                        longitude: c.lon,
+                        isAvailable: true,
+                    },
+                });
+            }
+
+            // Fetch again after seeding
+            collectors = await this.prisma.collectorProfile.findMany({
+                where: { isAvailable: true },
+            });
+        }
+
+        const randomCollector = collectors.length > 0 
+            ? collectors[Math.floor(Math.random() * collectors.length)]
+            : null;
+
         // Create the pickup
         const pickup = await this.prisma.pickup.create({
             data: {
@@ -67,7 +117,8 @@ export class PickupsService {
                 longitude: dto.longitude,
                 notes: dto.notes,
                 binId: dto.binId,
-                status: PickupStatus.PENDING,
+                status: randomCollector ? PickupStatus.COLLECTOR_ASSIGNED : PickupStatus.PENDING,
+                collectorId: randomCollector?.id || null,
             },
             include: {
                 collector: {
@@ -252,7 +303,7 @@ export class PickupsService {
             PickupStatus.IN_PROGRESS,
         ];
 
-        const pickup = await this.prisma.pickup.findFirst({
+        let pickup = await this.prisma.pickup.findFirst({
             where: {
                 userId,
                 status: { in: activeStatuses },
@@ -281,6 +332,38 @@ export class PickupsService {
             };
         }
 
+        // AUTO-ASSIGN LOGIC: If pending and no collector, assign one now
+        if (pickup.status === PickupStatus.PENDING && !pickup.collectorId) {
+            this.logger.log(`Auto-assigning collector for pickup ${pickup.id}`);
+            const collectors = await this.prisma.collectorProfile.findMany({
+                where: { isAvailable: true },
+            });
+
+            if (collectors.length > 0) {
+                const randomCollector = collectors[Math.floor(Math.random() * collectors.length)];
+                pickup = await this.prisma.pickup.update({
+                    where: { id: pickup.id },
+                    data: {
+                        status: PickupStatus.COLLECTOR_ASSIGNED,
+                        collectorId: randomCollector.id,
+                    },
+                    include: {
+                        collector: {
+                            include: {
+                                user: {
+                                    select: {
+                                        firstName: true,
+                                        lastName: true,
+                                        phone: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            }
+        }
+
         // Calculate ETA if collector is assigned and has location
         let eta: { minutes: number; distanceKm: number } | null = null;
         if (
@@ -303,19 +386,12 @@ export class PickupsService {
             };
         }
 
+        const data = this.formatPickup(pickup);
+
         return {
             success: true,
             data: {
-                id: pickup.id,
-                reference: pickup.reference,
-                wasteType: pickup.wasteType,
-                scheduledDate: pickup.scheduledDate,
-                timeSlot: pickup.timeSlot,
-                status: pickup.status,
-                address: pickup.address,
-                collector: pickup.collector
-                    ? this.formatCollector(pickup.collector)
-                    : null,
+                ...data,
                 eta,
             },
         };
@@ -441,6 +517,8 @@ export class PickupsService {
             photoUrl: collector.photoUrl,
             vehiclePlate: collector.vehiclePlate,
             rating: collector.rating,
+            latitude: collector.latitude,
+            longitude: collector.longitude,
         };
     }
 
