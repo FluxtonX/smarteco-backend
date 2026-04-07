@@ -369,10 +369,10 @@ export class AuthService {
         } as any);
 
         const refreshExpiry = this.configService.get<string>('JWT_REFRESH_EXPIRY') || '7d';
-        const refreshToken = this.jwtService.sign(refreshPayload as any, {
+        const refreshToken = this.jwtService.sign(refreshPayload as Record<string, any>, {
             secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
             expiresIn: refreshExpiry,
-        } as any);
+        });
 
         // Calculate refresh token expiry date
         const expiresAt = new Date();
