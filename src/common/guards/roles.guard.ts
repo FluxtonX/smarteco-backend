@@ -20,7 +20,7 @@ export class RolesGuard implements CanActivate {
             return true;
         }
 
-        const { user } = context.switchToHttp().getRequest();
+        const { user } = context.switchToHttp().getRequest<{ user?: { id: string; role: UserRole } }>();
 
         if (!user) {
             this.logger.warn('RolesGuard: No user found in request');
