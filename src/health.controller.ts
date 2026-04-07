@@ -9,11 +9,11 @@ export class HealthController {
     @ApiResponse({ status: 200, description: 'Server is healthy' })
     check() {
         return {
-            status: 'OK',
+            status: 'OKK',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             environment: process.env.NODE_ENV || 'development',
-            version: process.env.npm_package_version || '0.0.1',
+            version: process.env.npm_package_version || '0.0.2',
         };
     }
 }

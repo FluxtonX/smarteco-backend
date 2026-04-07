@@ -9,7 +9,7 @@ export const SWAGGER_PATH = 'api/docs';
 export const OTP_LENGTH = 6;
 export const OTP_EXPIRY_MINUTES = 5;
 export const OTP_MAX_ATTEMPTS = 3;
-export const OTP_RATE_LIMIT_MINUTES = 10;
+export const OTP_RATE_LIMIT_MINUTES = 1;
 export const OTP_RATE_LIMIT_MAX = 3;
 export const SANDBOX_OTP = '123456';
 

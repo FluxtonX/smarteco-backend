@@ -1,4 +1,10 @@
 import { Module } from '@nestjs/common';
+import { PickupsController } from './pickups.controller';
+import { PickupsService } from './pickups.service';
 
-@Module({})
+@Module({
+    controllers: [PickupsController],
+    providers: [PickupsService],
+    exports: [PickupsService],
+})
 export class PickupsModule {}
