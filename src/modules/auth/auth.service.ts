@@ -38,7 +38,21 @@ export class AuthService {
     // ─── SEND OTP ────────────────────────────────────
 
     async sendOtp(dto: SendOtpDto) {
-        const { phone } = dto;
+        const { phone, isLogin } = dto;
+
+        // Check if user exists
+        const existingUser = await this.prisma.user.findUnique({
+            where: { phone },
+        });
+
+        // ─── Existence Checks ─────────────────────────────
+        if (isLogin === true && !existingUser) {
+            throw new BadRequestException('User not found. Please create an account.');
+        }
+
+        if (isLogin === false && existingUser) {
+            throw new BadRequestException('User already exists. Please log in instead.');
+        }
 
         // Rate limiting: max OTP_RATE_LIMIT_MAX per OTP_RATE_LIMIT_MINUTES
         const rateLimitWindow = new Date();
@@ -77,11 +91,6 @@ export class AuthService {
                 otp: hashedOtp,
                 expiresAt,
             },
-        });
-
-        // Check if user exists
-        const existingUser = await this.prisma.user.findUnique({
-            where: { phone },
         });
 
         // TODO: Send OTP via SMS (Africa's Talking) — will be implemented in Chunk 8
