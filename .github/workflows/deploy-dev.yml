@@ -60,7 +60,11 @@ jobs:
 
       - name: 🚀 Deploy via SSH
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
+            -o ConnectTimeout=30 \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
             'bash /var/www/smarteco-backend/scripts/deploy.sh'
 
