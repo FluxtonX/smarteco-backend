@@ -78,8 +78,10 @@ export class AuthService {
     }
 
     // Generate OTP
-    const isDev = this.configService.get('NODE_ENV') !== 'production';
-    const otp = isDev ? SANDBOX_OTP : this.generateOtp();
+    // TODO: Switch to real OTP generation once Twilio is integrated
+    // const isDev = this.configService.get('NODE_ENV') !== 'production';
+    // const otp = isDev ? SANDBOX_OTP : this.generateOtp();
+    const otp = SANDBOX_OTP; // Always use 123456 until Twilio SMS is ready
 
     // Hash OTP before storing
     const hashedOtp = await bcrypt.hash(otp, 10);
@@ -97,9 +99,9 @@ export class AuthService {
       },
     });
 
-    // TODO: Send OTP via SMS (Africa's Talking) — will be implemented in Chunk 8
+    // TODO: Send OTP via SMS (Twilio) — will be implemented once keys are available
     this.logger.log(
-      `OTP for ${phone}: ${isDev ? otp : '[hidden]'} (dev mode: ${isDev})`,
+      `OTP for ${phone}: ${otp} (sandbox mode — Twilio not configured)`,
     );
 
     return {
