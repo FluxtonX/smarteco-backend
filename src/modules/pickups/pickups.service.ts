@@ -70,8 +70,8 @@ export class PickupsService {
           lastName: 'Mugisha',
           plate: 'RAD 123A',
           rating: 4.8,
-          lat: 33.6844,
-          lon: 73.0479,
+          lat: -1.9441,
+          lon: 30.0619,
         },
         {
           phone: '+250788333444',
@@ -79,8 +79,8 @@ export class PickupsService {
           lastName: 'Damascene',
           plate: 'RBA 456C',
           rating: 4.6,
-          lat: 33.6944,
-          lon: 73.0579,
+          lat: -1.9501,
+          lon: 30.0700,
         },
       ];
 
@@ -118,10 +118,12 @@ export class PickupsService {
       });
     }
 
-    const randomCollector =
-      collectors.length > 0
-        ? collectors[Math.floor(Math.random() * collectors.length)]
-        : null;
+    // Auto-assign: pick the least busy available collector (nearest if possible)
+    const assignedCollector = this.findBestCollector(
+      collectors,
+      dto.latitude,
+      dto.longitude,
+    );
 
     // Create the pickup
     const pickup = await this.prisma.pickup.create({
@@ -136,10 +138,10 @@ export class PickupsService {
         longitude: dto.longitude,
         notes: dto.notes,
         binId: dto.binId,
-        status: randomCollector
+        status: assignedCollector
           ? PickupStatus.COLLECTOR_ASSIGNED
           : PickupStatus.PENDING,
-        collectorId: randomCollector?.id || null,
+        collectorId: assignedCollector?.id || null,
       },
       include: {
         collector: {
@@ -523,6 +525,49 @@ export class PickupsService {
 
   private toRad(deg: number): number {
     return deg * (Math.PI / 180);
+  }
+
+  /**
+   * Find the best collector to assign:
+   * 1. Prioritize nearest collector to the pickup location
+   * 2. Among equally close collectors, pick the one with fewest total pickups
+   */
+  private findBestCollector(
+    collectors: { id: string; latitude: number | null; longitude: number | null; totalPickups: number }[],
+    pickupLat: number,
+    pickupLon: number,
+  ) {
+    if (collectors.length === 0) return null;
+
+    // Score each collector: lower is better (distance + pickup load)
+    let bestCollector = collectors[0];
+    let bestDistance = Infinity;
+
+    for (const c of collectors) {
+      if (c.latitude && c.longitude) {
+        const dist = this.haversineDistance(
+          c.latitude,
+          c.longitude,
+          pickupLat,
+          pickupLon,
+        );
+        // If closer, or same distance but fewer pickups → prefer this one
+        if (
+          dist < bestDistance ||
+          (dist === bestDistance && c.totalPickups < bestCollector.totalPickups)
+        ) {
+          bestDistance = dist;
+          bestCollector = c;
+        }
+      } else if (bestDistance === Infinity) {
+        // No location data — fallback to least busy
+        if (c.totalPickups < bestCollector.totalPickups) {
+          bestCollector = c;
+        }
+      }
+    }
+
+    return bestCollector;
   }
 
   private formatCollector(collector: any) {

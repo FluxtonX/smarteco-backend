@@ -27,7 +27,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Send OTP',
     description:
-      'Send a 6-digit OTP to the provided phone number. In development mode, the OTP is always 123456. Rate limited to 3 requests per 10 minutes per phone number.',
+      'Send a 6-digit OTP to the provided phone number via Twilio Verify SMS. Rate limiting is handled by Twilio.',
   })
   @ApiResponse({
     status: 200,
