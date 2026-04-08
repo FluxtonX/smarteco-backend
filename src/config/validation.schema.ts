@@ -36,9 +36,10 @@ export const validationSchema = Joi.object({
   AIRTEL_CLIENT_SECRET: Joi.string().allow('').optional(),
   AIRTEL_BASE_URL: Joi.string().default('https://openapiuat.airtel.africa'),
 
-  // WhatsApp / Twilio (optional for dev)
-  TWILIO_ACCOUNT_SID: Joi.string().allow('').optional(),
-  TWILIO_AUTH_TOKEN: Joi.string().allow('').optional(),
+  // Twilio (Verify + WhatsApp)
+  TWILIO_ACCOUNT_SID: Joi.string().required(),
+  TWILIO_AUTH_TOKEN: Joi.string().required(),
+  TWILIO_VERIFY_SERVICE_SID: Joi.string().required(),
   TWILIO_WHATSAPP_NUMBER: Joi.string().allow('').optional(),
 
   // Firebase (optional for dev)
