@@ -3,8 +3,8 @@ import { PickupsController } from './pickups.controller';
 import { PickupsService } from './pickups.service';
 
 @Module({
-    controllers: [PickupsController],
-    providers: [PickupsService],
-    exports: [PickupsService],
+  controllers: [PickupsController],
+  providers: [PickupsService],
+  exports: [PickupsService],
 })
 export class PickupsModule {}
