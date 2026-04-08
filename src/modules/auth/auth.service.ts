@@ -2,27 +2,20 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
+import { TwilioService } from '../../integrations/twilio/twilio.service';
 import { SendOtpDto, VerifyOtpDto, RefreshTokenDto } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import {
-  OTP_LENGTH,
-  OTP_EXPIRY_MINUTES,
-  OTP_MAX_ATTEMPTS,
-  OTP_RATE_LIMIT_MINUTES,
-  OTP_RATE_LIMIT_MAX,
-  SANDBOX_OTP,
   ECOPOINTS,
   BINS_PER_USER,
   BIN_WASTE_TYPES,
   BIN_QR_PREFIX,
 } from '../../common/constants';
-import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -33,6 +26,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly twilioService: TwilioService,
   ) {}
 
   // ─── SEND OTP ────────────────────────────────────
@@ -58,57 +52,25 @@ export class AuthService {
       );
     }
 
-    // Rate limiting: max OTP_RATE_LIMIT_MAX per OTP_RATE_LIMIT_MINUTES
-    const rateLimitWindow = new Date();
-    rateLimitWindow.setMinutes(
-      rateLimitWindow.getMinutes() - OTP_RATE_LIMIT_MINUTES,
-    );
-
-    const recentOtps = await this.prisma.otpVerification.count({
-      where: {
-        phone,
-        createdAt: { gte: rateLimitWindow },
-      },
-    });
-
-    if (recentOtps >= OTP_RATE_LIMIT_MAX) {
+    // Send OTP via Twilio Verify (handles code gen, expiry, rate‑limiting)
+    try {
+      const result = await this.twilioService.sendVerification(phone);
+      this.logger.log(
+        `Twilio Verify OTP sent to ${phone} — status: ${result.status}`,
+      );
+    } catch (error: any) {
+      // Twilio rate-limit & invalid-number errors already have clear messages
+      this.logger.error(`Twilio sendVerification failed: ${error.message}`);
       throw new BadRequestException(
-        `Too many OTP requests. Try again in ${OTP_RATE_LIMIT_MINUTES} minutes.`,
+        'Failed to send OTP. Please check the phone number and try again.',
       );
     }
-
-    // Generate OTP
-    // TODO: Switch to real OTP generation once Twilio is integrated
-    // const isDev = this.configService.get('NODE_ENV') !== 'production';
-    // const otp = isDev ? SANDBOX_OTP : this.generateOtp();
-    const otp = SANDBOX_OTP; // Always use 123456 until Twilio SMS is ready
-
-    // Hash OTP before storing
-    const hashedOtp = await bcrypt.hash(otp, 10);
-
-    // Set expiry
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + OTP_EXPIRY_MINUTES);
-
-    // Store OTP
-    await this.prisma.otpVerification.create({
-      data: {
-        phone,
-        otp: hashedOtp,
-        expiresAt,
-      },
-    });
-
-    // TODO: Send OTP via SMS (Twilio) — will be implemented once keys are available
-    this.logger.log(
-      `OTP for ${phone}: ${otp} (sandbox mode — Twilio not configured)`,
-    );
 
     return {
       success: true,
       message: 'OTP sent successfully',
       data: {
-        expiresIn: OTP_EXPIRY_MINUTES * 60,
+        expiresIn: 600, // Twilio Verify default: 10 minutes
         isNewUser: !existingUser,
       },
     };
@@ -119,47 +81,20 @@ export class AuthService {
   async verifyOtp(dto: VerifyOtpDto) {
     const { phone, otp, referralCode, fcmToken } = dto;
 
-    // Find the latest unverified OTP for this phone
-    const otpRecord = await this.prisma.otpVerification.findFirst({
-      where: {
-        phone,
-        verified: false,
-        expiresAt: { gte: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!otpRecord) {
+    // Verify OTP via Twilio Verify
+    let verification: { valid: boolean; status: string };
+    try {
+      verification = await this.twilioService.checkVerification(phone, otp);
+    } catch (error: any) {
+      this.logger.error(`Twilio checkVerification failed: ${error.message}`);
       throw new BadRequestException(
-        'No valid OTP found. Please request a new one.',
+        'Verification failed. Please request a new OTP.',
       );
     }
 
-    // Check max attempts
-    if (otpRecord.attempts >= OTP_MAX_ATTEMPTS) {
-      throw new BadRequestException(
-        'Maximum verification attempts exceeded. Please request a new OTP.',
-      );
-    }
-
-    // Verify OTP
-    const isValid = await bcrypt.compare(otp, otpRecord.otp);
-
-    if (!isValid) {
-      // Increment attempts
-      await this.prisma.otpVerification.update({
-        where: { id: otpRecord.id },
-        data: { attempts: { increment: 1 } },
-      });
-
+    if (!verification.valid) {
       throw new BadRequestException('Invalid OTP. Please try again.');
     }
-
-    // Mark OTP as verified
-    await this.prisma.otpVerification.update({
-      where: { id: otpRecord.id },
-      data: { verified: true },
-    });
 
     // Find or create user
     let user = await this.prisma.user.findUnique({
@@ -333,15 +268,6 @@ export class AuthService {
   }
 
   // ─── PRIVATE HELPERS ─────────────────────────────
-
-  private generateOtp(): string {
-    const digits = '0123456789';
-    let otp = '';
-    for (let i = 0; i < OTP_LENGTH; i++) {
-      otp += digits[Math.floor(Math.random() * digits.length)];
-    }
-    return otp;
-  }
 
   private generateReferralCode(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
