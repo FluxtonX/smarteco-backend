@@ -21,22 +21,22 @@ export const JWT_REFRESH_DEFAULT_EXPIRY = '7d';
 // ─── EcoPoints ───────────────────────────────────
 
 export const ECOPOINTS = {
-    REGISTRATION_BONUS: 100,
-    REFERRAL_BONUS: 200,
-    ORGANIC_PER_KG: 15,
-    RECYCLABLE_PER_KG: 20,
-    EWASTE_PER_ITEM: 50,
-    GENERAL_PER_KG: 5,
-    GLASS_PER_KG: 10,
-    HAZARDOUS_PER_ITEM: 30,
+  REGISTRATION_BONUS: 100,
+  REFERRAL_BONUS: 200,
+  ORGANIC_PER_KG: 15,
+  RECYCLABLE_PER_KG: 20,
+  EWASTE_PER_ITEM: 50,
+  GENERAL_PER_KG: 5,
+  GLASS_PER_KG: 10,
+  HAZARDOUS_PER_ITEM: 30,
 };
 
 // ─── Tier Thresholds ─────────────────────────────
 
 export const TIER_THRESHOLDS = {
-    ECO_STARTER: { min: 0, max: 999, multiplier: 1.0 },
-    ECO_WARRIOR: { min: 1000, max: 4999, multiplier: 1.25 },
-    ECO_CHAMPION: { min: 5000, max: Infinity, multiplier: 1.5 },
+  ECO_STARTER: { min: 0, max: 999, multiplier: 1.0 },
+  ECO_WARRIOR: { min: 1000, max: 4999, multiplier: 1.25 },
+  ECO_CHAMPION: { min: 5000, max: Infinity, multiplier: 1.5 },
 };
 
 // ─── Pickup ──────────────────────────────────────
@@ -54,11 +54,11 @@ export const BIN_AUTO_SCHEDULE_THRESHOLD = 95; // percentage
 export const BINS_PER_USER = 5;
 
 export const BIN_WASTE_TYPES = [
-    'ORGANIC',
-    'RECYCLABLE',
-    'EWASTE',
-    'GENERAL',
-    'HAZARDOUS',
+  'ORGANIC',
+  'RECYCLABLE',
+  'EWASTE',
+  'GENERAL',
+  'HAZARDOUS',
 ] as const;
 
 // ─── Collector ───────────────────────────────────
