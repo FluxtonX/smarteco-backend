@@ -52,4 +52,4 @@ import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
   ],
   controllers: [HealthController],
 })
-export class AppModule { }
+export class AppModule {}
