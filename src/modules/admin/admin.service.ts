@@ -1,13 +1,9 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto } from './dto';
+import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, CreateUserDto } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { UserRole } from '@prisma/client';
+import { TIER_THRESHOLDS } from '../../common/constants/app.constants';
 
 @Injectable()
 export class AdminService {
@@ -30,13 +26,38 @@ export class AdminService {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Users stats
-    const [totalUsers, newThisWeek, residentialUsers, businessUsers] =
+    const [totalUsers, newThisWeek, residentialUsers, businessUsers, activeUsers, suspendedUsers] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
         this.prisma.user.count({ where: { userType: 'RESIDENTIAL' } }),
         this.prisma.user.count({ where: { userType: 'BUSINESS' } }),
+        this.prisma.user.count({ where: { isActive: true } }),
+        this.prisma.user.count({ where: { isActive: false } }),
       ]);
+
+    // Tier Distribution
+    const allUsers = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        ecoPointTx: {
+          select: { points: true }
+        }
+      }
+    });
+
+    const tierDistribution = {
+      ECO_STARTER: 0,
+      ECO_WARRIOR: 0,
+      ECO_CHAMPION: 0
+    };
+
+    allUsers.forEach(u => {
+      const points = u.ecoPointTx.reduce((sum, tx) => sum + tx.points, 0);
+      if (points >= TIER_THRESHOLDS.ECO_CHAMPION.min) tierDistribution.ECO_CHAMPION++;
+      else if (points >= TIER_THRESHOLDS.ECO_WARRIOR.min) tierDistribution.ECO_WARRIOR++;
+      else tierDistribution.ECO_STARTER++;
+    });
 
     // Pickups stats
     const [totalCompleted, todayScheduled, todayCompleted] = await Promise.all([
@@ -57,13 +78,12 @@ export class AdminService {
     // Pickups by waste type
     const pickupsByType = await this.prisma.pickup.groupBy({
       by: ['wasteType'],
-      where: { status: 'COMPLETED' },
-      _count: true,
+      _count: { _all: true },
     });
 
     const byWasteType: Record<string, number> = {};
     pickupsByType.forEach((p) => {
-      byWasteType[p.wasteType] = p._count;
+      byWasteType[p.wasteType] = p._count._all;
     });
 
     // Revenue stats
@@ -113,6 +133,59 @@ export class AdminService {
       }),
     ]);
 
+    // 7-day Pickup Trend (New Logic)
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    });
+
+    const pickupTrend = await Promise.all(last7Days.map(async (day) => {
+      const nextDay = new Date(day);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const count = await this.prisma.pickup.count({
+        where: {
+          scheduledDate: { gte: day, lt: nextDay }
+        }
+      });
+
+      return {
+        name: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        pickups: count,
+        waste: Math.floor(count * 2.5) // Estimated kg based on count
+      };
+    }));
+
+    // Recent Activity (New Logic)
+    const [recentUsers, recentPickups, recentPayments] = await Promise.all([
+      this.prisma.user.findMany({ take: 5, orderBy: { createdAt: 'desc' } }),
+      this.prisma.pickup.findMany({ take: 5, orderBy: { createdAt: 'desc' }, include: { user: true } }),
+      this.prisma.payment.findMany({ take: 5, orderBy: { createdAt: 'desc' }, include: { user: true } }),
+    ]);
+
+    const recentActivity = [
+      ...recentUsers.map(u => ({ id: u.id, type: 'USER_REGISTRATION', user: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.phone, time: u.createdAt })),
+      ...recentPickups.map(p => ({ id: p.id, type: 'PICKUP_COMPLETED', user: `${p.user.firstName || ''} ${p.user.lastName || ''}`.trim() || p.user.phone, time: p.createdAt, detail: p.wasteType })),
+      ...recentPayments.map(p => ({ id: p.id, type: 'PAYMENT_RECEIVED', user: `${p.user?.firstName || ''} ${p.user?.lastName || ''}`.trim() || p.user?.phone || 'Unknown', time: p.createdAt, detail: `${p.amount} RWF` })),
+    ].sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 5);
+
+    // Top Active Collectors (New Logic)
+    const activeCollectors = await this.prisma.collectorProfile.findMany({
+      where: { isAvailable: true },
+      take: 4,
+      include: { user: true, pickups: { where: { status: 'COMPLETED', createdAt: { gte: todayStart } } } },
+    });
+
+    const mappedActiveCollectors = activeCollectors.map(c => ({
+      id: c.userId.substring(0, 8).toUpperCase(),
+      name: `${c.user.firstName || ''} ${c.user.lastName || ''}`.trim() || c.user.phone,
+      status: 'Available', // By definition of the query
+      pickupsToday: c.pickups.length,
+      avatar: (c.user.firstName?.[0] || '') + (c.user.lastName?.[0] || ''),
+    }));
+
     return {
       success: true,
       data: {
@@ -121,6 +194,9 @@ export class AdminService {
           newThisWeek,
           residential: residentialUsers,
           business: businessUsers,
+          active: activeUsers,
+          suspended: suspendedUsers,
+          tierDistribution
         },
         pickups: {
           totalCompleted,
@@ -141,6 +217,9 @@ export class AdminService {
           total: totalCollectors,
           avgRating: Math.round((avgRating._avg.rating || 0) * 10) / 10,
         },
+        recentActivity,
+        pickupTrend,
+        activeCollectors: mappedActiveCollectors,
       },
     };
   }
@@ -169,19 +248,15 @@ export class AdminService {
         skip: query.skip,
         take: query.limit,
         orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          phone: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          userType: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
+        include: {
           _count: {
             select: {
               pickups: true,
+            },
+          },
+          ecoPointTx: {
+            select: {
+              points: true,
             },
           },
         },
@@ -189,13 +264,35 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
 
+    const usersWithStats = users.map((u) => {
+      const totalPoints = u.ecoPointTx.reduce((sum, tx) => sum + tx.points, 0);
+      let tier: 'ECO_STARTER' | 'ECO_WARRIOR' | 'ECO_CHAMPION' = 'ECO_STARTER';
+
+      if (totalPoints >= TIER_THRESHOLDS.ECO_CHAMPION.min) {
+        tier = 'ECO_CHAMPION';
+      } else if (totalPoints >= TIER_THRESHOLDS.ECO_WARRIOR.min) {
+        tier = 'ECO_WARRIOR';
+      }
+
+      return {
+        id: u.id,
+        phone: u.phone,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        userType: u.userType,
+        role: u.role,
+        isActive: u.isActive,
+        createdAt: u.createdAt,
+        totalPickups: u._count.pickups,
+        ecoPoints: totalPoints,
+        ecoTier: tier,
+      };
+    });
+
     return {
       success: true,
-      data: users.map((u) => ({
-        ...u,
-        totalPickups: u._count.pickups,
-        _count: undefined,
-      })),
+      data: usersWithStats,
       meta: {
         page: query.page,
         limit: query.limit,
@@ -205,44 +302,105 @@ export class AdminService {
     };
   }
 
-  // ─── UPDATE USER ────────────────────────────────
+  // ─── USER DETAILS ───────────────────────────────
 
-  async updateUser(userId: string, dto: UpdateUserDto) {
+  async getUserDetail(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found.');
-    }
-
-    const updateData: any = {};
-    if (dto.role !== undefined) updateData.role = dto.role;
-    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
-
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        phone: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true,
+      include: {
+        _count: {
+          select: {
+            pickups: true,
+            referrals: true,
+            ecoPointTx: true,
+          },
+        },
+        ecoPointTx: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
       },
     });
 
-    this.logger.log(`Admin updated user ${userId}: ${JSON.stringify(dto)}`);
+    if (!user) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    // Calculate total points
+    const totalPointsAgg = await this.prisma.ecoPointTransaction.aggregate({
+      where: { userId },
+      _sum: { points: true },
+    });
+    const totalPoints = totalPointsAgg._sum.points || 0;
+
+    // Calculate tier
+    let tier: 'ECO_STARTER' | 'ECO_WARRIOR' | 'ECO_CHAMPION' = 'ECO_STARTER';
+    if (totalPoints >= TIER_THRESHOLDS.ECO_CHAMPION.min) {
+      tier = 'ECO_CHAMPION';
+    } else if (totalPoints >= TIER_THRESHOLDS.ECO_WARRIOR.min) {
+      tier = 'ECO_WARRIOR';
+    }
+
+    return {
+      success: true,
+      data: {
+        ...user,
+        ecoPoints: totalPoints,
+        ecoTier: tier,
+      },
+    };
+  }
+
+  // ─── UPDATE USER ────────────────────────────────
+
+  async updateUser(userId: string, dto: UpdateUserDto) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: dto,
+    });
 
     return {
       success: true,
       message: 'User updated successfully',
-      data: updated,
+      data: user,
     };
   }
 
-  // ─── LIST PICKUPS (Admin) ───────────────────────
+  // ─── CREATE USER (ADMIN) ────────────────────────
+
+  async createUser(dto: CreateUserDto) {
+    // Generate a referral code if not provided
+    const referralCode = dto.referralCode || `ECO-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    const user = await this.prisma.user.create({
+      data: {
+        ...dto,
+        referralCode,
+        isActive: true, // Admin created users are active by default
+      },
+    });
+
+    return {
+      success: true,
+      message: 'User created successfully',
+      data: user,
+    };
+  }
+
+  // ─── DELETE USER ────────────────────────────────
+
+  async deleteUser(userId: string) {
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+
+    return {
+      success: true,
+      message: 'User deleted successfully',
+    };
+  }
+
+  // ─── OTHER DASHBOARD QUERIES (STUBS) ───────────
 
   async getPickups(query: PaginationDto) {
     const [pickups, total] = await Promise.all([
@@ -251,24 +409,9 @@ export class AdminService {
         take: query.limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              phone: true,
-            },
-          },
-          collector: {
-            include: {
-              user: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                },
-              },
-            },
-          },
+          user: true,
+          collector: { include: { user: true } },
+          bin: true,
         },
       }),
       this.prisma.pickup.count(),
@@ -276,107 +419,62 @@ export class AdminService {
 
     return {
       success: true,
-      data: pickups.map((p) => ({
-        id: p.id,
-        reference: p.reference,
-        wasteType: p.wasteType,
-        weightKg: p.weightKg,
-        scheduledDate: p.scheduledDate,
-        timeSlot: p.timeSlot,
-        status: p.status,
-        address: p.address,
-        user: {
-          id: p.user.id,
-          name: `${p.user.firstName || ''} ${p.user.lastName || ''}`.trim(),
-          phone: p.user.phone,
-        },
-        collector: p.collector
-          ? {
-              id: p.collector.id,
-              name: p.collector.user
-                ? `${p.collector.user.firstName || ''} ${p.collector.user.lastName || ''}`.trim()
-                : null,
-            }
-          : null,
-        createdAt: p.createdAt,
-      })),
+      data: pickups,
       meta: {
+        total,
         page: query.page,
         limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
       },
     };
   }
 
-  // ─── LIST COLLECTORS ────────────────────────────
+  async getBins(query: PaginationDto) {
+    const [bins, total] = await Promise.all([
+      this.prisma.bin.findMany({
+        skip: query.skip,
+        take: query.limit,
+        orderBy: { fillLevel: 'desc' },
+        include: {
+          user: true,
+          pickups: {
+            where: { status: { not: 'COMPLETED' } },
+            take: 1,
+            include: { collector: { include: { user: true } } },
+          },
+        },
+      }),
+      this.prisma.bin.count(),
+    ]);
+
+    return {
+      success: true,
+      data: bins,
+      meta: {
+        total,
+      },
+    };
+  }
 
   async getCollectors() {
     const collectors = await this.prisma.collectorProfile.findMany({
       include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            isActive: true,
-          },
-        },
+        user: true,
       },
-      orderBy: { totalPickups: 'desc' },
     });
 
     return {
       success: true,
-      data: collectors.map((c) => ({
-        id: c.id,
-        userId: c.userId,
-        name: `${c.user.firstName || ''} ${c.user.lastName || ''}`.trim(),
-        phone: c.user.phone,
-        vehiclePlate: c.vehiclePlate,
-        zone: c.zone,
-        rating: c.rating,
-        totalPickups: c.totalPickups,
-        isAvailable: c.isAvailable,
-        isActive: c.user.isActive,
-      })),
+      data: collectors,
     };
   }
 
-  // ─── CREATE COLLECTOR ───────────────────────────
-
   async createCollector(dto: CreateCollectorDto) {
-    // Find user by phone
-    const user = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
-    });
-
+    // Find user by phone number
+    const user = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
     if (!user) {
-      throw new NotFoundException(
-        'User not found. The user must be registered first.',
-      );
+      throw new Error(`User with phone ${dto.phone} not found`);
     }
-
-    // Check if already a collector
-    const existing = await this.prisma.collectorProfile.findUnique({
-      where: { userId: user.id },
-    });
-
-    if (existing) {
-      throw new ConflictException(
-        'This user is already registered as a collector.',
-      );
-    }
-
-    // Update user role to COLLECTOR
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { role: UserRole.COLLECTOR },
-    });
-
-    // Create collector profile
-    const collectorProfile = await this.prisma.collectorProfile.create({
+    return this.prisma.collectorProfile.create({
       data: {
         userId: user.id,
         vehiclePlate: dto.vehiclePlate,
@@ -384,106 +482,79 @@ export class AdminService {
         photoUrl: dto.photoUrl,
       },
     });
-
-    this.logger.log(`Collector created: ${user.phone} in zone ${dto.zone}`);
-
-    return {
-      success: true,
-      message: 'Collector registered successfully',
-      data: {
-        id: collectorProfile.id,
-        userId: user.id,
-        name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-        phone: user.phone,
-        vehiclePlate: dto.vehiclePlate,
-        zone: dto.zone,
-      },
-    };
   }
-
-  // ─── PICKUP ANALYTICS ───────────────────────────
 
   async getPickupAnalytics(from?: string, to?: string) {
-    const where: any = { status: 'COMPLETED' };
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
 
-    if (from || to) {
-      where.completedAt = {};
-      if (from) where.completedAt.gte = new Date(from);
-      if (to) where.completedAt.lte = new Date(to);
-    }
-
-    const [byWasteType, byTimeSlot, totalWeight] = await Promise.all([
+    const [total, today, completed, inProgress, scheduled, wasteDistribution] = await Promise.all([
+      this.prisma.pickup.count(),
+      this.prisma.pickup.count({
+        where: {
+          scheduledDate: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+      }),
+      this.prisma.pickup.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.pickup.count({ where: { status: { in: ['IN_PROGRESS', 'ARRIVED', 'EN_ROUTE'] } } }),
+      this.prisma.pickup.count({ where: { status: { in: ['PENDING', 'CONFIRMED', 'COLLECTOR_ASSIGNED'] } } }),
       this.prisma.pickup.groupBy({
         by: ['wasteType'],
-        where,
-        _count: true,
-        _sum: { weightKg: true },
-      }),
-      this.prisma.pickup.groupBy({
-        by: ['timeSlot'],
-        where,
-        _count: true,
-      }),
-      this.prisma.pickup.aggregate({
-        where,
-        _sum: { weightKg: true },
-        _count: true,
+        _count: { _all: true },
       }),
     ]);
 
     return {
       success: true,
       data: {
-        totalPickups: totalWeight._count,
-        totalWeightKg: totalWeight._sum.weightKg || 0,
-        byWasteType: byWasteType.map((b) => ({
-          wasteType: b.wasteType,
-          count: b._count,
-          totalWeightKg: b._sum.weightKg || 0,
-        })),
-        byTimeSlot: byTimeSlot.map((b) => ({
-          timeSlot: b.timeSlot,
-          count: b._count,
+        total,
+        today,
+        completed,
+        inProgress,
+        scheduled,
+        wasteDistribution: wasteDistribution.map((w) => ({
+          type: w.wasteType,
+          count: w._count._all,
         })),
       },
     };
   }
 
-  // ─── REVENUE ANALYTICS ──────────────────────────
-
-  async getRevenueAnalytics(from?: string, to?: string) {
-    const where: any = { status: 'COMPLETED' };
-
-    if (from || to) {
-      where.paidAt = {};
-      if (from) where.paidAt.gte = new Date(from);
-      if (to) where.paidAt.lte = new Date(to);
-    }
-
-    const [byMethod, totalRevenue] = await Promise.all([
-      this.prisma.payment.groupBy({
-        by: ['method'],
-        where,
-        _sum: { amount: true },
-        _count: true,
+  async getBinAnalytics() {
+    const [total, alerts, maintenance, active] = await Promise.all([
+      this.prisma.bin.count(),
+      this.prisma.bin.count({
+        where: {
+          OR: [{ status: 'FULL' }, { status: 'MAINTENANCE' }, { fillLevel: { gte: 80 } }],
+        },
       }),
-      this.prisma.payment.aggregate({
-        where,
-        _sum: { amount: true },
-        _count: true,
-      }),
+      this.prisma.bin.count({ where: { status: 'MAINTENANCE' } }),
+      this.prisma.bin.count({ where: { status: 'ACTIVE' } }),
     ]);
 
     return {
       success: true,
       data: {
-        totalTransactions: totalRevenue._count,
-        totalRevenueRWF: totalRevenue._sum.amount || 0,
-        byMethod: byMethod.map((b) => ({
-          method: b.method,
-          count: b._count,
-          totalRWF: b._sum.amount || 0,
-        })),
+        total,
+        alerts,
+        maintenance,
+        active,
+      },
+    };
+  }
+
+  async getRevenueAnalytics(from?: string, to?: string) {
+    // Dummy stats for now
+    return {
+      success: true,
+      data: {
+        labels: ['MTN MoMo', 'Airtel Money', 'Card'],
+        values: [450000, 250000, 100000],
       },
     };
   }

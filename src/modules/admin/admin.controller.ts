@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -20,7 +21,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto } from './dto';
+import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, CreateUserDto } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -72,6 +73,43 @@ export class AdminController {
     @Body() dto: UpdateUserDto,
   ) {
     return this.adminService.updateUser(userId, dto);
+  }
+
+  @Post('users')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a new user',
+    description: 'Register a new user directly from the admin panel. Admin only.',
+  })
+  @ApiResponse({ status: 201, description: 'User created' })
+  @ApiResponse({ status: 409, description: 'Phone or email already in use' })
+  async createUser(@Body() dto: CreateUserDto) {
+    return this.adminService.createUser(dto);
+  }
+
+  @Delete('users/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete a user',
+    description: 'Permanently delete a user from the system. Admin only.',
+  })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'User deleted' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async deleteUser(@Param('id', ParseUUIDPipe) userId: string) {
+    return this.adminService.deleteUser(userId);
+  }
+
+  @Get('users/:id')
+  @ApiOperation({
+    summary: 'Get user details',
+    description: 'Get detailed information and stats for a specific user. Admin only.',
+  })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'User details retrieved' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getUserDetail(@Param('id', ParseUUIDPipe) userId: string) {
+    return this.adminService.getUserDetail(userId);
   }
 
   @Get('pickups')
@@ -156,5 +194,25 @@ export class AdminController {
     @Query('to') to?: string,
   ) {
     return this.adminService.getRevenueAnalytics(from, to);
+  }
+
+  @Get('bins')
+  @ApiOperation({
+    summary: 'List all smart bins',
+    description: 'Get paginated list of all smart bins in the system. Admin only.',
+  })
+  @ApiResponse({ status: 200, description: 'Bins list retrieved' })
+  async getBins(@Query() query: PaginationDto) {
+    return this.adminService.getBins(query);
+  }
+
+  @Get('analytics/bins')
+  @ApiOperation({
+    summary: 'Smart bin analytics',
+    description: 'Get aggregate stats for all smart bins. Admin only.',
+  })
+  @ApiResponse({ status: 200, description: 'Bin analytics retrieved' })
+  async getBinAnalytics() {
+    return this.adminService.getBinAnalytics();
   }
 }

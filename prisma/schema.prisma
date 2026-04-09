@@ -1,14 +1,160 @@
-// ─── Generator ─────────────────────────────────────
 generator client {
   provider = "prisma-client-js"
 }
 
-// ─── Datasource ─────────────────────────────────────
 datasource db {
   provider = "postgresql"
 }
 
-// ─── Enums ─────────────────────────────────────────
+model User {
+  id               String                @id @default(uuid())
+  phone            String                @unique
+  firstName        String?
+  lastName         String?
+  email            String?               @unique
+  avatarUrl        String?
+  referralCode     String?               @unique
+  referredBy       String?
+  fcmToken         String?
+  isActive         Boolean               @default(true)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  role             UserRole              @default(USER)
+  userType         UserType?
+  bins             Bin[]
+  collectorProfile CollectorProfile?
+  ecoPointTx       EcoPointTransaction[]
+  notifications    Notification[]
+  payments         Payment[]
+  pickups          Pickup[]              @relation("UserPickups")
+  refreshTokens    RefreshToken[]
+  referrer         User?                 @relation("UserReferral", fields: [referredBy], references: [id])
+  referrals        User[]                @relation("UserReferral")
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  phone     String
+  otp       String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model EcoPointTransaction {
+  id          String   @id @default(uuid())
+  points      Int
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+  userId      String
+  pickupId    String?
+  pickup      Pickup?  @relation(fields: [pickupId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Bin {
+  id            String    @id @default(uuid())
+  qrCode        String    @unique
+  fillLevel     Int       @default(0)
+  reportedIssue String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  wasteType     WasteType
+  lastEmptied   DateTime?
+  latitude      Float?
+  longitude     Float?
+  status        BinStatus @default(ACTIVE)
+  user          User      @relation(fields: [userId], references: [id])
+  pickups       Pickup[]
+}
+
+model Pickup {
+  id            String                @id @default(uuid())
+  scheduledDate DateTime
+  address       String
+  latitude      Float
+  longitude     Float
+  notes         String?
+  weightKg      Float?
+  cancelReason  String?
+  userId        String
+  collectorId   String?
+  binId         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  reference     String                @unique
+  wasteType     WasteType
+  status        PickupStatus          @default(PENDING)
+  cancelledAt   DateTime?
+  completedAt   DateTime?
+  timeSlot      TimeSlot
+  ecoPointTx    EcoPointTransaction[]
+  payment       Payment?
+  bin           Bin?                  @relation(fields: [binId], references: [id])
+  collector     CollectorProfile?     @relation("CollectorPickups", fields: [collectorId], references: [id])
+  user          User                  @relation("UserPickups", fields: [userId], references: [id])
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  amount         Float
+  pickupId       String        @unique
+  userId         String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  currency       String        @default("RWF")
+  externalRef    String?
+  paidAt         DateTime?
+  transactionRef String        @unique
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  pickup         Pickup        @relation(fields: [pickupId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id     String           @id @default(uuid())
+  type   NotificationType @default(IN_APP)
+  title  String
+  body   String
+  data   Json?
+  isRead Boolean          @default(false)
+  sentAt DateTime         @default(now())
+  userId String
+  user   User             @relation(fields: [userId], references: [id])
+}
+
+model CollectorProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  vehiclePlate String
+  zone         String
+  latitude     Float?
+  longitude    Float?
+  photoUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  rating       Float    @default(5.0)
+  totalPickups Int      @default(0)
+  isAvailable  Boolean  @default(true)
+  user         User     @relation(fields: [userId], references: [id])
+  pickups      Pickup[] @relation("CollectorPickups")
+}
 
 enum UserRole {
   USER
@@ -18,9 +164,9 @@ enum UserRole {
 
 enum UserType {
   RESIDENTIAL
-  BUSINESS
   COMMERCIAL
   INDUSTRIAL
+  BUSINESS
 }
 
 enum NotificationType {
@@ -75,169 +221,4 @@ enum BinStatus {
   FULL
   INACTIVE
   MAINTENANCE
-}
-
-// ─── Models ────────────────────────────────────────
-
-model User {
-  id                  String                @id @default(uuid())
-  phone               String                @unique
-  firstName           String?
-  lastName            String?
-  email               String?               @unique
-  userType            UserType?
-  role                UserRole              @default(USER)
-  avatarUrl           String?
-  referralCode        String?               @unique
-  referredBy          String?
-  fcmToken            String?
-  isActive            Boolean               @default(true)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-
-  refreshTokens       RefreshToken[]
-  ecoPointTx          EcoPointTransaction[]
-  bins                Bin[]
-  pickups             Pickup[]              @relation("UserPickups")
-  payments            Payment[]
-  notifications       Notification[]
-  collectorProfile    CollectorProfile?
-  
-  referrals           User[]                @relation("UserReferral")
-  referrer            User?                 @relation("UserReferral", fields: [referredBy], references: [id])
-}
-
-model OtpVerification {
-  id        String   @id @default(uuid())
-  phone     String
-  otp       String
-  expiresAt DateTime
-  verified  Boolean  @default(false)
-  attempts  Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  expiresAt DateTime
-  revoked   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-}
-
-model EcoPointTransaction {
-  id          String   @id @default(uuid())
-  points      Int
-  action      String
-  description String?
-  createdAt   DateTime @default(now())
-  
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  
-  pickupId    String?
-  pickup      Pickup?  @relation(fields: [pickupId], references: [id])
-}
-
-model Bin {
-  id            String    @id @default(uuid())
-  wasteType     WasteType
-  qrCode        String    @unique
-  fillLevel     Int       @default(0)
-  status        BinStatus @default(ACTIVE)
-  reportedIssue String?
-  notes         String?
-  latitude      Float?
-  longitude     Float?
-  lastEmptied   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  pickups       Pickup[]
-}
-
-model Pickup {
-  id            String       @id @default(uuid())
-  reference     String       @unique
-  wasteType     WasteType
-  weightKg      Float?
-  scheduledDate DateTime
-  timeSlot      TimeSlot
-  address       String
-  latitude      Float
-  longitude     Float
-  notes         String?
-  status        PickupStatus @default(PENDING)
-  completedAt   DateTime?
-  cancelledAt   DateTime?
-  cancelReason  String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  userId        String
-  user          User         @relation("UserPickups", fields: [userId], references: [id])
-  
-  collectorId   String?
-  collector     CollectorProfile? @relation("CollectorPickups", fields: [collectorId], references: [id])
-  
-  binId         String?
-  bin           Bin?         @relation(fields: [binId], references: [id])
-  
-  payment       Payment?
-  ecoPointTx    EcoPointTransaction[]
-}
-
-model Payment {
-  id             String        @id @default(uuid())
-  transactionRef String        @unique
-  externalRef    String?
-  amount         Float
-  currency       String        @default("RWF")
-  method         PaymentMethod
-  status         PaymentStatus @default(PENDING)
-  paidAt         DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  pickupId       String        @unique
-  pickup         Pickup        @relation(fields: [pickupId], references: [id])
-  
-  userId         String
-  user           User          @relation(fields: [userId], references: [id])
-}
-
-model Notification {
-  id        String           @id @default(uuid())
-  type      NotificationType @default(IN_APP)
-  title     String
-  body      String
-  data      Json?
-  isRead    Boolean          @default(false)
-  sentAt    DateTime         @default(now())
-  
-  userId    String
-  user      User             @relation(fields: [userId], references: [id])
-}
-
-model CollectorProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
-  vehiclePlate String
-  zone         String
-  latitude     Float?
-  longitude    Float?
-  photoUrl     String?
-  rating       Float    @default(5.0)
-  totalPickups Int      @default(0)
-  isAvailable  Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
-  pickups      Pickup[] @relation("CollectorPickups")
 }
