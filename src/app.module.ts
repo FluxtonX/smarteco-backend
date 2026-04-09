@@ -17,6 +17,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AdminModule } from './modules/admin/admin.module';
 import { UssdModule } from './integrations/ussd/ussd.module';
 import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
+import { TwilioModule } from './integrations/twilio/twilio.module';
 
 @Module({
   imports: [
@@ -47,9 +48,10 @@ import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
     AdminModule,
 
     // ─── Integration Modules ────────────────────────
+    TwilioModule,
     UssdModule,
     WhatsAppModule,
   ],
   controllers: [HealthController],
 })
-export class AppModule { }
+export class AppModule {}
