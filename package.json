@@ -17,7 +17,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "studio": "npx prisma studio"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -29,7 +30,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.6",
     "@prisma/adapter-pg": "^7.4.0",
-    "@prisma/client": "^7.4.0",
+    "@prisma/client": "^7.6.0",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
@@ -40,8 +41,8 @@
     "nanoid": "^5.1.6",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "pg": "^8.18.0",
-    "prisma": "^7.4.0",
+    "pg": "^8.20.0",
+    "prisma": "^7.6.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "twilio": "^5.13.1",
