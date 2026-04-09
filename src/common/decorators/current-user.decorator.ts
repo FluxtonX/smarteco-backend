@@ -6,7 +6,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  *
  * @example
  * @Get('profile')
- * getProfile(@CurrentUser() user: User) {
+ * getProfile(@CurrentUser() user: AuthenticatedUser) {
  *   return user;
  * }
  *
@@ -15,11 +15,28 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  *   return userId;
  * }
  */
-export const CurrentUser = createParamDecorator(
-    (data: string | undefined, ctx: ExecutionContext) => {
-        const request = ctx.switchToHttp().getRequest();
-        const user = request.user;
 
-        return data ? user?.[data] : user;
-    },
+export interface AuthenticatedUser {
+  id: string;
+  phone: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  userType: string;
+  role: string;
+  referralCode: string | null;
+  avatarUrl: string | null;
+  isActive: boolean;
+  [key: string]: unknown;
+}
+
+export const CurrentUser = createParamDecorator(
+  (data: string | undefined, ctx: ExecutionContext): unknown => {
+    const request = ctx
+      .switchToHttp()
+      .getRequest<{ user?: AuthenticatedUser }>();
+    const user: AuthenticatedUser | undefined = request.user;
+
+    return data ? user?.[data] : user;
+  },
 );

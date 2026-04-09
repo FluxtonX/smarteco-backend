@@ -3,8 +3,8 @@ import { EcoPointsController } from './eco-points.controller';
 import { EcoPointsService } from './eco-points.service';
 
 @Module({
-    controllers: [EcoPointsController],
-    providers: [EcoPointsService],
-    exports: [EcoPointsService],
+  controllers: [EcoPointsController],
+  providers: [EcoPointsService],
+  exports: [EcoPointsService],
 })
 export class EcoPointsModule {}

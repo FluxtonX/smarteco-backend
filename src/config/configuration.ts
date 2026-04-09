@@ -37,16 +37,14 @@ export default registerAs('app', () => ({
     apiUser: process.env.MOMO_API_USER,
     subscriptionKey: process.env.MOMO_SUBSCRIPTION_KEY,
     baseUrl:
-      process.env.MOMO_BASE_URL ||
-      'https://sandbox.momodeveloper.mtn.com',
+      process.env.MOMO_BASE_URL || 'https://sandbox.momodeveloper.mtn.com',
   },
 
   // Airtel Money
   airtel: {
     clientId: process.env.AIRTEL_CLIENT_ID,
     clientSecret: process.env.AIRTEL_CLIENT_SECRET,
-    baseUrl:
-      process.env.AIRTEL_BASE_URL || 'https://openapiuat.airtel.africa',
+    baseUrl: process.env.AIRTEL_BASE_URL || 'https://openapiuat.airtel.africa',
   },
 
   // WhatsApp (Twilio)
