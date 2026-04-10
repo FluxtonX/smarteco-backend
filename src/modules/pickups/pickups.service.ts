@@ -12,14 +12,22 @@ import {
   PICKUP_REFERENCE_LENGTH,
   PICKUP_MIN_ADVANCE_HOURS,
   ECOPOINTS,
+  PICKUP_PRICES,
+  DEFAULT_CURRENCY,
 } from '../../common/constants';
-import { PickupStatus, WasteType } from '@prisma/client';
+import { PickupStatus, WasteType, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { MomoService } from '../../integrations/momo/momo.service';
+import { AirtelService } from '../../integrations/airtel/airtel.service';
 
 @Injectable()
 export class PickupsService {
   private readonly logger = new Logger(PickupsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly momoService: MomoService,
+    private readonly airtelService: AirtelService,
+  ) {}
 
   // ─── CREATE PICKUP ──────────────────────────────
 
@@ -125,7 +133,56 @@ export class PickupsService {
       dto.longitude,
     );
 
-    // Create the pickup
+    // Calculate payment amount
+    const amount = PICKUP_PRICES[dto.wasteType] || 100;
+    
+    // Determine currency: Sandbox MoMo usually requires EUR, production uses RWF
+    const isSandbox = process.env.MOMO_BASE_URL?.includes('sandbox') || !process.env.MOMO_API_KEY;
+    const currency = isSandbox ? 'EUR' : DEFAULT_CURRENCY;
+
+    // Fetch user for phone number
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    // Determine payment method (default to MTN_MOMO)
+    const method = dto.paymentMethod || PaymentMethod.MTN_MOMO;
+
+    // Initiate Payment
+    let paymentRef: string | null = null;
+    try {
+      this.logger.log(`Initiating ${method} payment for pickup ${reference}: ${amount} ${currency}`);
+      
+      if (method === PaymentMethod.MTN_MOMO) {
+        const momoResult = await this.momoService.requestToPay(
+          amount,
+          currency,
+          user.phone,
+          reference,
+          `Waste Pickup: ${reference}`,
+          `Payment for ${dto.wasteType} pickup`,
+        );
+        paymentRef = momoResult.referenceId;
+      } else {
+        const airtelResult = await this.airtelService.requestToPay(
+          amount,
+          currency,
+          user.phone,
+          reference,
+        );
+        paymentRef = airtelResult.referenceId;
+      }
+    } catch (error: any) {
+      this.logger.error(`Failed to initiate ${method} payment for ${reference}: ${error.message}`);
+      throw new BadRequestException(`${method} payment initiation failed. Please check your phone or try again.`);
+    }
+
+    // Create the pickup and linked payment record
     const pickup = await this.prisma.pickup.create({
       data: {
         reference,
@@ -142,6 +199,17 @@ export class PickupsService {
           ? PickupStatus.COLLECTOR_ASSIGNED
           : PickupStatus.PENDING,
         collectorId: assignedCollector?.id || null,
+        payment: {
+          create: {
+            userId,
+            amount,
+            currency,
+            method,
+            status: PaymentStatus.PENDING,
+            transactionRef: reference,
+            externalRef: paymentRef,
+          },
+        },
       },
       include: {
         collector: {
@@ -155,11 +223,12 @@ export class PickupsService {
             },
           },
         },
+        payment: true,
       },
     });
 
     this.logger.log(
-      `Pickup created: ${reference} by user ${userId} for ${dto.wasteType} on ${dto.scheduledDate}`,
+      `Pickup created: ${reference} with payment ${paymentRef} for user ${userId}`,
     );
 
     return {
@@ -178,6 +247,15 @@ export class PickupsService {
         notes: pickup.notes,
         collector: pickup.collector
           ? this.formatCollector(pickup.collector)
+          : null,
+        payment: pickup.payment
+          ? {
+              id: pickup.payment.id,
+              amount: pickup.payment.amount,
+              currency: pickup.payment.currency,
+              status: pickup.payment.status,
+              transactionRef: pickup.payment.transactionRef,
+            }
           : null,
         estimatedPoints,
         createdAt: pickup.createdAt,

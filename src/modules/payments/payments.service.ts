@@ -156,22 +156,27 @@ export class PaymentsService {
     if (payment.status === PaymentStatus.PENDING && payment.externalRef) {
       try {
         let providerStatus: string;
+        let failureReason: string | undefined;
 
         if (payment.method === PaymentMethod.MTN_MOMO) {
           const result = await this.momoService.checkPaymentStatus(
             payment.externalRef,
           );
           providerStatus = result.status;
+          failureReason = result.reason;
         } else {
           const result = await this.airtelService.checkPaymentStatus(
             payment.externalRef,
           );
-          providerStatus =
-            result.status === 'SUCCESS' ? 'SUCCESSFUL' : result.status;
+          providerStatus = result.status === 'SUCCESS' ? 'SUCCESSFUL' : result.status;
+          failureReason = result.message;
         }
 
         // Update status based on provider response
-        if (providerStatus === 'SUCCESSFUL' || providerStatus === 'SUCCESS') {
+        const isSuccessful = ['SUCCESSFUL', 'SUCCESS', 'TS'].includes(providerStatus.toUpperCase());
+        const isFailed = ['FAILED', 'REJECTED', 'EXPIRED', 'TF'].includes(providerStatus.toUpperCase());
+
+        if (isSuccessful) {
           await this.prisma.payment.update({
             where: { id: payment.id },
             data: {
@@ -180,12 +185,17 @@ export class PaymentsService {
             },
           });
           payment.status = PaymentStatus.COMPLETED;
-        } else if (providerStatus === 'FAILED') {
+        } else if (isFailed) {
           await this.prisma.payment.update({
             where: { id: payment.id },
-            data: { status: PaymentStatus.FAILED },
+            data: { 
+              status: PaymentStatus.FAILED,
+              failReason: failureReason,
+              failedAt: new Date(),
+            },
           });
           payment.status = PaymentStatus.FAILED;
+          (payment as any).failReason = failureReason;
         }
       } catch (error: any) {
         this.logger.error(`Status check failed: ${error.message}`);
@@ -202,7 +212,9 @@ export class PaymentsService {
         currency: payment.currency,
         method: payment.method,
         status: payment.status,
+        failReason: (payment as any).failReason,
         paidAt: payment.paidAt,
+        failedAt: payment.failedAt,
         pickup: payment.pickup,
       },
     };
@@ -261,15 +273,18 @@ export class PaymentsService {
 
     let transactionRef: string | undefined;
     let status: string;
+    let reason: string | undefined;
 
     if (provider === 'momo') {
       // MTN MoMo callback
       transactionRef = body.externalId;
       status = body.status; // SUCCESSFUL or FAILED
+      reason = body.reason;
     } else if (provider === 'airtel') {
       // Airtel callback
       transactionRef = body.transaction?.id;
       status = body.transaction?.status_code === 'TS' ? 'SUCCESSFUL' : 'FAILED';
+      reason = body.transaction?.message;
     } else {
       this.logger.warn(`Unknown payment provider: ${provider}`);
       return { received: true };
@@ -297,16 +312,23 @@ export class PaymentsService {
       return { received: true };
     }
 
-    const newStatus =
-      status === 'SUCCESSFUL' || status === 'SUCCESS'
-        ? PaymentStatus.COMPLETED
-        : PaymentStatus.FAILED;
+    const isSuccessful = ['SUCCESSFUL', 'SUCCESS', 'TS'].includes(status.toUpperCase());
+    const isFailed = ['FAILED', 'REJECTED', 'EXPIRED', 'TF'].includes(status.toUpperCase());
+
+    if (!isSuccessful && !isFailed) {
+      this.logger.log(`Payment ${transactionRef} status ${status} ignored (still pending).`);
+      return { received: true };
+    }
+
+    const newStatus = isSuccessful ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
 
     await this.prisma.payment.update({
       where: { id: payment.id },
       data: {
         status: newStatus,
         paidAt: newStatus === PaymentStatus.COMPLETED ? new Date() : null,
+        failedAt: newStatus === PaymentStatus.FAILED ? new Date() : null,
+        failReason: newStatus === PaymentStatus.FAILED ? reason : null,
       },
     });
 
