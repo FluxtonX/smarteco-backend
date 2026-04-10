@@ -45,6 +45,14 @@ export const PICKUP_REFERENCE_PREFIX = 'ECO-';
 export const PICKUP_REFERENCE_LENGTH = 5;
 export const PICKUP_MIN_ADVANCE_HOURS = 24;
 export const MAX_PICKUPS_PER_COLLECTOR_PER_DAY = 8;
+export const PICKUP_PRICES = {
+  ORGANIC: 100,
+  RECYCLABLE: 150,
+  EWASTE: 500,
+  GENERAL: 120,
+  GLASS: 200,
+  HAZARDOUS: 700,
+};
 
 // ─── Bin ─────────────────────────────────────────
 

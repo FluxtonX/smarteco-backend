@@ -8,7 +8,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { WasteType, TimeSlot } from '@prisma/client';
+import { WasteType, TimeSlot, PaymentMethod } from '@prisma/client';
 
 export class CreatePickupDto {
   @ApiProperty({
@@ -79,4 +79,13 @@ export class CreatePickupDto {
   @IsOptional()
   @IsUUID()
   binId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Preferred payment method',
+    enum: PaymentMethod,
+    example: 'MTN_MOMO',
+  })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 }
