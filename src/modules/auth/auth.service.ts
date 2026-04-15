@@ -8,7 +8,13 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
-import { SendOtpDto, VerifyOtpDto, RefreshTokenDto } from './dto';
+import {
+  SendOtpDto,
+  VerifyOtpDto,
+  RefreshTokenDto,
+  GoogleLoginDto,
+} from './dto';
+import { FirebaseService } from '../../integrations/firebase/firebase.service';
 import { JwtPayload } from './strategies/jwt.strategy';
 import {
   ECOPOINTS,
@@ -27,6 +33,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly twilioService: TwilioService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   // ─── SEND OTP ────────────────────────────────────
@@ -227,27 +234,21 @@ export class AuthService {
       throw new UnauthorizedException('User not found or deactivated');
     }
 
-    // Generate new access token only
-    const accessPayload: JwtPayload = {
-      sub: user.id,
+    await this.prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: { revoked: true },
+    });
+
+    const tokens = await this.generateTokens({
+      id: user.id,
       phone: user.phone,
       role: user.role,
-      type: 'access',
-    };
-
-    const accessToken = this.jwtService.sign(
-      accessPayload as any,
-      {
-        secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_EXPIRY') || '24h',
-      } as any,
-    );
+    });
 
     return {
       success: true,
       data: {
-        accessToken,
-        expiresIn: 86400,
+        ...tokens,
       },
     };
   }
@@ -264,6 +265,116 @@ export class AuthService {
     return {
       success: true,
       message: 'Logged out successfully',
+    };
+  }
+
+  async googleLogin(dto: GoogleLoginDto) {
+    const { idToken, email, displayName, photoUrl, fcmToken } = dto;
+
+    // 1. Verify token with Firebase
+    let decodedToken;
+    try {
+      decodedToken = await this.firebaseService.verifyIdToken(idToken);
+    } catch (error) {
+      this.logger.error(`Firebase token verification failed: ${error.message}`);
+      throw new UnauthorizedException('Invalid Google ID Token');
+    }
+
+    if (decodedToken.email !== email) {
+      throw new BadRequestException('Email mismatch');
+    }
+
+    // 2. Find or create user by email
+    let user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      // For Google login without phone, we handle it as a new profile
+      // Note: your current schema might require phone. Let's assume it doesn't or handles it.
+      // If phone is required, we might need to ask for it after google login if not linked.
+
+      const newReferralCode = this.generateReferralCode();
+
+      const [firstName, ...lastNameParts] = (displayName || '').split(' ');
+      const lastName = lastNameParts.join(' ');
+
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          phone: `GOOGLE_${decodedToken.uid.substring(0, 15)}`, // Satisfy mandatory & unique constraint
+          firstName: firstName || null,
+          lastName: lastName || null,
+          avatarUrl: photoUrl || null,
+          referralCode: newReferralCode,
+          fcmToken: fcmToken || null,
+        },
+      });
+
+      // Award registration bonus
+      await this.prisma.ecoPointTransaction.create({
+        data: {
+          userId: user.id,
+          points: ECOPOINTS.REGISTRATION_BONUS,
+          action: 'REGISTRATION',
+          description: `Welcome bonus: ${ECOPOINTS.REGISTRATION_BONUS} EcoPoints`,
+        },
+      });
+
+      // Create default bins
+      await this.createDefaultBins(user.id);
+
+      this.logger.log(`New user registered via Google: ${email}`);
+    } else {
+      // Update profile info from Google if missing
+      const updateData: any = {};
+      if (!user.firstName && displayName)
+        updateData.firstName = displayName.split(' ')[0];
+      if (!user.avatarUrl && photoUrl) updateData.avatarUrl = photoUrl;
+      if (fcmToken) updateData.fcmToken = fcmToken;
+
+      if (Object.keys(updateData).length > 0) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: updateData,
+        });
+      }
+    }
+
+    // 3. Generate tokens
+    const tokens = await this.generateTokens({
+      id: user.id,
+      phone: user.phone || `GOOGLE_${decodedToken.uid.substring(0, 15)}`,
+      role: user.role,
+    });
+
+    // 4. Calculate stats
+    const totalPoints = await this.getTotalPoints(user.id);
+    const ecoTier = this.calculateTier(totalPoints);
+
+    return {
+      success: true,
+      message: 'Authentication successful',
+      data: {
+        ...tokens,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          userType: user.userType,
+          role: user.role,
+          referralCode: user.referralCode,
+          avatarUrl: user.avatarUrl,
+          ecoPoints: totalPoints,
+          ecoTier,
+          isNewUser,
+        },
+      },
     };
   }
 
@@ -324,10 +435,7 @@ export class AuthService {
       } as any,
     );
 
-    // Calculate refresh token expiry date
-    const expiresAt = new Date();
-    const days = parseInt(refreshExpiry) || 7;
-    expiresAt.setDate(expiresAt.getDate() + days);
+    const expiresAt = this.calculateTokenExpiry(refreshExpiry);
 
     // Store refresh token in DB
     await this.prisma.refreshToken.create({
@@ -343,6 +451,39 @@ export class AuthService {
       refreshToken,
       expiresIn: 86400, // 24 hours in seconds
     };
+  }
+
+  private calculateTokenExpiry(expiresIn: string): Date {
+    const value = expiresIn.trim();
+    const match = value.match(/^(\d+)([smhd])$/i);
+
+    if (!match) {
+      const fallback = new Date();
+      fallback.setDate(fallback.getDate() + 7);
+      return fallback;
+    }
+
+    const amount = parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+    const expiry = new Date();
+
+    switch (unit) {
+      case 's':
+        expiry.setSeconds(expiry.getSeconds() + amount);
+        break;
+      case 'm':
+        expiry.setMinutes(expiry.getMinutes() + amount);
+        break;
+      case 'h':
+        expiry.setHours(expiry.getHours() + amount);
+        break;
+      case 'd':
+      default:
+        expiry.setDate(expiry.getDate() + amount);
+        break;
+    }
+
+    return expiry;
   }
 
   private async getTotalPoints(userId: string): Promise<number> {

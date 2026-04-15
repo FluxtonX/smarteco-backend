@@ -18,6 +18,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { UssdModule } from './integrations/ussd/ussd.module';
 import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
 import { TwilioModule } from './integrations/twilio/twilio.module';
+import { FirebaseModule } from './integrations/firebase/firebase.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { TwilioModule } from './integrations/twilio/twilio.module';
     TwilioModule,
     UssdModule,
     WhatsAppModule,
+    FirebaseModule,
   ],
   controllers: [HealthController],
 })
