@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { InitiatePaymentDto } from './dto';
@@ -105,7 +106,23 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'MTN MoMo webhook callback',
     description:
-      'Receives payment status updates from MTN MoMo. No authentication required.',
+      'Receives payment status updates from MTN MoMo. No authentication required. Called directly by the MTN MoMo payment gateway.',
+  })
+  @ApiBody({
+    description: 'MTN MoMo webhook payload',
+    schema: {
+      example: {
+        referenceId: 'uuid',
+        status: 'SUCCESSFUL',
+        financialTransactionId: 'momo-tx-id',
+        reason: null,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Webhook processed successfully',
+    schema: { example: { received: true } },
   })
   async momoWebhook(@Body() body: any) {
     return this.paymentsService.handleWebhook('momo', body);
@@ -116,7 +133,24 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Airtel Money webhook callback',
     description:
-      'Receives payment status updates from Airtel Money. No authentication required.',
+      'Receives payment status updates from Airtel Money. No authentication required. Called directly by the Airtel Money payment gateway.',
+  })
+  @ApiBody({
+    description: 'Airtel Money webhook payload',
+    schema: {
+      example: {
+        transaction: {
+          id: 'airtel-tx-id',
+          status: 'TS',
+          message: 'success',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Webhook processed successfully',
+    schema: { example: { received: true } },
   })
   async airtelWebhook(@Body() body: any) {
     return this.paymentsService.handleWebhook('airtel', body);

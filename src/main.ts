@@ -66,16 +66,29 @@ All responses follow a consistent format:
   "meta": { "page": 1, "limit": 10, "total": 100, "totalPages": 10 }
 }
 \`\`\`
+
+### Role-Based Access
+- **USER** — Default role. Can manage own pickups, bins, points, and payments.
+- **COLLECTOR** — Can view assigned pickups and update status/location.
+- **ADMIN** — Full access to all data, analytics, and user management.
     `,
     )
-    .setVersion('1.0')
+    .setVersion('1.0.0')
+    .setContact(
+      'SmartEco Engineering',
+      'https://smarteco.rw',
+      'api@smarteco.rw',
+    )
+    .setLicense('Proprietary', 'https://smarteco.rw/terms')
+    .addServer('http://localhost:3000', 'Local Development')
+    .addServer('https://api.smarteco.rw', 'Production')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
         name: 'JWT',
-        description: 'Enter JWT access token',
+        description: 'Enter JWT access token obtained from /auth/otp/verify or /auth/google',
         in: 'header',
       },
       'JWT-auth',
@@ -94,12 +107,18 @@ All responses follow a consistent format:
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup(SWAGGER_PATH, app, document, {
     customSiteTitle: 'SmartEco API Docs',
-    customCss: '.swagger-ui .topbar { display: none }',
+    customCss: `
+      .swagger-ui .topbar { display: none }
+      .swagger-ui .info .title { color: #2e7d32; }
+      .swagger-ui .scheme-container { background: #f1f8e9; padding: 12px; border-radius: 6px; }
+    `,
     swaggerOptions: {
       persistAuthorization: true,
       docExpansion: 'none',
       filter: true,
       showRequestDuration: true,
+      tryItOutEnabled: true,
+      requestSnippetsEnabled: true,
     },
   });
 

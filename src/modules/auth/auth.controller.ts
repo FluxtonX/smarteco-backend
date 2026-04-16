@@ -13,7 +13,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { SendOtpDto, VerifyOtpDto, RefreshTokenDto } from './dto';
+import { SendOtpDto, VerifyOtpDto, RefreshTokenDto, GoogleLoginDto } from './dto';
 import { JwtAuthGuard } from './guards';
 import { CurrentUser } from '../../common/decorators';
 
@@ -143,5 +143,20 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async logout(@CurrentUser('id') userId: string) {
     return this.authService.logout(userId);
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Login with Google',
+    description:
+      'Verify the Firebase ID Token and receive JWT tokens. If the user does not exist, a new account is automatically created.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Authentication successful',
+  })
+  async googleLogin(@Body() dto: GoogleLoginDto) {
+    return this.authService.googleLogin(dto);
   }
 }
