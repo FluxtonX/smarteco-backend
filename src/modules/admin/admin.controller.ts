@@ -41,7 +41,22 @@ export class AdminController {
     description:
       'Returns aggregated statistics for users, pickups, revenue, EcoPoints, and collectors. Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'Dashboard stats retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Dashboard stats retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          users: { total: 1240, active: 1185, newThisMonth: 78 },
+          pickups: { total: 5430, completed: 4890, pending: 120, cancelled: 420 },
+          revenue: { totalRwf: 2850000, thisMonthRwf: 387500 },
+          ecoPoints: { totalIssued: 285000, totalRedeemed: 42000 },
+          collectors: { total: 18, active: 15 },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 403, description: 'Admin access required' })
   async getDashboard() {
     return this.adminService.getDashboard();
@@ -53,7 +68,31 @@ export class AdminController {
     description:
       'Get paginated list of all users with search and filters. Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'Users list retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Users list retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: [
+          {
+            id: 'uuid',
+            phone: '+250788123456',
+            firstName: 'Jean',
+            lastName: 'Baptiste',
+            email: 'jean@example.com',
+            role: 'USER',
+            userType: 'RESIDENTIAL',
+            isActive: true,
+            ecoPoints: 350,
+            createdAt: '2024-01-15T10:00:00Z',
+          },
+        ],
+        meta: { page: 1, limit: 10, total: 1240, totalPages: 124 },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async getUsers(@Query() query: AdminUserQueryDto) {
     return this.adminService.getUsers(query);
   }
@@ -65,8 +104,19 @@ export class AdminController {
     description: 'Update user role or active status. Admin only.',
   })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'User updated' })
+  @ApiResponse({
+    status: 200,
+    description: 'User updated',
+    schema: {
+      example: {
+        success: true,
+        message: 'User updated successfully',
+        data: { id: 'uuid', role: 'COLLECTOR', isActive: true },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async updateUser(
     @Param('id', ParseUUIDPipe) userId: string,
     @Body() dto: UpdateUserDto,
@@ -80,7 +130,29 @@ export class AdminController {
     description:
       'Get paginated list of all pickups with user and collector info. Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'Pickups list retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Pickups list retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: [
+          {
+            id: 'uuid',
+            reference: 'ECO-A3F8K',
+            wasteType: 'ORGANIC',
+            status: 'COMPLETED',
+            scheduledDate: '2026-04-15T00:00:00.000Z',
+            timeSlot: 'MORNING_8_10',
+            user: { name: 'Jean Baptiste', phone: '+250788123456' },
+            collector: { name: 'Patrick Mugisha', vehiclePlate: 'RAD 123A' },
+          },
+        ],
+        meta: { page: 1, limit: 10, total: 5430, totalPages: 543 },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async getPickups(@Query() query: PaginationDto) {
     return this.adminService.getPickups(query);
   }
@@ -91,7 +163,28 @@ export class AdminController {
     description:
       'Get list of all registered collectors with performance stats. Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'Collectors list retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Collectors list retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: [
+          {
+            id: 'uuid',
+            name: 'Patrick Mugisha',
+            phone: '+250788111222',
+            vehiclePlate: 'RAD 123A',
+            zone: 'Kigali-Central',
+            rating: 4.8,
+            totalPickups: 245,
+            isActive: true,
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async getCollectors() {
     return this.adminService.getCollectors();
   }
@@ -103,9 +196,26 @@ export class AdminController {
     description:
       'Register an existing user as a collector. The user must already be registered. Their role will be changed to COLLECTOR. Admin only.',
   })
-  @ApiResponse({ status: 201, description: 'Collector registered' })
+  @ApiResponse({
+    status: 201,
+    description: 'Collector registered',
+    schema: {
+      example: {
+        success: true,
+        message: 'Collector registered successfully',
+        data: {
+          id: 'uuid',
+          name: 'Patrick Mugisha',
+          phone: '+250788111222',
+          vehiclePlate: 'RAD 123A',
+          zone: 'Kigali-Central',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 409, description: 'User is already a collector' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async createCollector(@Body() dto: CreateCollectorDto) {
     return this.adminService.createCollector(dto);
   }
@@ -120,13 +230,36 @@ export class AdminController {
     name: 'from',
     required: false,
     description: 'Start date (YYYY-MM-DD)',
+    example: '2026-01-01',
   })
   @ApiQuery({
     name: 'to',
     required: false,
     description: 'End date (YYYY-MM-DD)',
+    example: '2026-12-31',
   })
-  @ApiResponse({ status: 200, description: 'Pickup analytics retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Pickup analytics retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          byWasteType: [
+            { wasteType: 'ORGANIC', count: 1820, percentageOfTotal: 33.5 },
+            { wasteType: 'RECYCLABLE', count: 1540, percentageOfTotal: 28.4 },
+            { wasteType: 'HAZARDOUS', count: 320, percentageOfTotal: 5.9 },
+          ],
+          byTimeSlot: [
+            { timeSlot: 'MORNING_8_10', count: 2100 },
+            { timeSlot: 'AFTERNOON_12_14', count: 1650 },
+          ],
+          totalInRange: 5430,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async getPickupAnalytics(
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -144,13 +277,35 @@ export class AdminController {
     name: 'from',
     required: false,
     description: 'Start date (YYYY-MM-DD)',
+    example: '2026-01-01',
   })
   @ApiQuery({
     name: 'to',
     required: false,
     description: 'End date (YYYY-MM-DD)',
+    example: '2026-12-31',
   })
-  @ApiResponse({ status: 200, description: 'Revenue analytics retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Revenue analytics retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          totalRwf: 2850000,
+          byMethod: [
+            { method: 'MOMO', totalRwf: 1920000, count: 3200 },
+            { method: 'AIRTEL', totalRwf: 930000, count: 1450 },
+          ],
+          byMonth: [
+            { month: '2026-01', totalRwf: 210000 },
+            { month: '2026-02', totalRwf: 245000 },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
   async getRevenueAnalytics(
     @Query('from') from?: string,
     @Query('to') to?: string,

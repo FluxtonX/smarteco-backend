@@ -38,6 +38,11 @@ export class VerifyOtpDto {
   @IsString()
   referralCode?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Firebase Cloud Messaging token for push notifications. Register on first login or when token refreshes.',
+    example: 'fMp6KqR...',
+  })
   @IsOptional()
   @IsString()
   fcmToken?: string;
