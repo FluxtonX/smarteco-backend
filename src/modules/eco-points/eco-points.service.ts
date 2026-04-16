@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { EcoPointsQueryDto } from './dto';
 import { TIER_THRESHOLDS, ECOPOINTS } from '../../common/constants';
-import { WasteType } from '@prisma/client';
+import { WasteType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class EcoPointsService {
@@ -66,7 +66,7 @@ export class EcoPointsService {
   // ─── GET HISTORY ────────────────────────────────
 
   async getHistory(userId: string, query: EcoPointsQueryDto) {
-    const where: any = { userId };
+    const where: Prisma.EcoPointTransactionWhereInput = { userId };
 
     if (query.action) {
       where.action = query.action;

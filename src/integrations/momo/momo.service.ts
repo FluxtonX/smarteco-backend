@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface MomoRequestToPayResult {
@@ -19,6 +19,24 @@ export interface MomoPaymentStatusResult {
   payeeNote: string;
   externalId: string;
   reason?: string;
+}
+
+interface MomoApiResponse {
+  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+  amount: string;
+  currency: string;
+  payer?: {
+    partyId?: string;
+  };
+  payerMessage?: string;
+  payeeNote?: string;
+  externalId?: string;
+  reason?: string;
+}
+
+interface MomoTokenResponse {
+  access_token: string;
+  expires_in: number;
 }
 
 @Injectable()
@@ -116,11 +134,17 @@ export class MomoService {
         status: 'PENDING',
         externalId,
       };
-    } catch (error: any) {
-      this.logger.error(
-        `MoMo Request to Pay failed: ${error.message}`,
-        error.response?.data,
-      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `MoMo Request to Pay failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(
+          `MoMo Request to Pay failed: ${(error as Error).message}`,
+        );
+      }
       throw error;
     }
   }
@@ -150,7 +174,7 @@ export class MomoService {
     try {
       const token = await this.getAccessToken();
 
-      const response = await this.client.get(
+      const response = await this.client.get<MomoApiResponse>(
         `/collection/v1_0/requesttopay/${referenceId}`,
         {
           headers: {
@@ -175,11 +199,17 @@ export class MomoService {
         externalId: response.data.externalId || '',
         reason: response.data.reason,
       };
-    } catch (error: any) {
-      this.logger.error(
-        `MoMo check status failed: ${error.message}`,
-        error.response?.data,
-      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `MoMo check status failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(
+          `MoMo check status failed: ${(error as Error).message}`,
+        );
+      }
       throw error;
     }
   }
@@ -232,11 +262,17 @@ export class MomoService {
         `MoMo Disbursement initiated: ${referenceId} for ${amount} ${currency}`,
       );
       return { referenceId, status: 'PENDING' };
-    } catch (error: any) {
-      this.logger.error(
-        `MoMo Disbursement failed: ${error.message}`,
-        error.response?.data,
-      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `MoMo Disbursement failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(
+          `MoMo Disbursement failed: ${(error as Error).message}`,
+        );
+      }
       throw error;
     }
   }
@@ -254,11 +290,15 @@ export class MomoService {
         `${this.apiUser}:${this.apiKey}`,
       ).toString('base64');
 
-      const response = await this.client.post('/collection/token/', null, {
-        headers: {
-          Authorization: `Basic ${credentials}`,
+      const response = await this.client.post<MomoTokenResponse>(
+        '/collection/token/',
+        null,
+        {
+          headers: {
+            Authorization: `Basic ${credentials}`,
+          },
         },
-      });
+      );
 
       this.accessToken = response.data.access_token;
       // Token expires in X seconds — buffer by 60s
@@ -266,9 +306,11 @@ export class MomoService {
       this.tokenExpiry = new Date(Date.now() + expiresIn * 1000);
 
       this.logger.log('MoMo access token refreshed');
-      return this.accessToken!;
-    } catch (error: any) {
-      this.logger.error(`MoMo token request failed: ${error.message}`);
+      return this.accessToken;
+    } catch (error) {
+      this.logger.error(
+        `MoMo token request failed: ${(error as Error).message}`,
+      );
       throw error;
     }
   }

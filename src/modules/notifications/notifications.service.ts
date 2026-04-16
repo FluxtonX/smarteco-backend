@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationQueryDto } from './dto';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
@@ -12,7 +12,7 @@ export class NotificationsService {
   // ─── GET NOTIFICATIONS ──────────────────────────
 
   async getNotifications(userId: string, query: NotificationQueryDto) {
-    const where: any = { userId };
+    const where: Prisma.NotificationWhereInput = { userId };
 
     if (query.isRead !== undefined) {
       where.isRead = query.isRead;
@@ -101,7 +101,7 @@ export class NotificationsService {
     title: string,
     body: string,
     type: NotificationType = NotificationType.IN_APP,
-    data?: any,
+    data?: Prisma.InputJsonValue,
   ) {
     const notification = await this.prisma.notification.create({
       data: {

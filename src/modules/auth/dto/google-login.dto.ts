@@ -32,7 +32,7 @@ export class GoogleLoginDto {
   @IsOptional()
   @IsString()
   photoUrl?: string;
-  
+
   @ApiProperty({
     example: 'DEVICE_TOKEN',
     description: 'Optional FCM token for notifications',

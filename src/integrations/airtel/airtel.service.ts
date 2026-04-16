@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface AirtelPaymentResult {
@@ -14,6 +14,26 @@ export interface AirtelPaymentStatusResult {
   transactionId: string;
   status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'TS' | 'TF' | 'TA' | 'TIP';
   message: string;
+}
+
+interface AirtelApiResponse {
+  data?: {
+    transaction?: {
+      id?: string;
+      status?: string;
+      airtel_money_id?: string;
+    };
+  };
+  status?: {
+    code?: string;
+    message?: string;
+    success?: boolean;
+  };
+}
+
+interface AirtelTokenResponse {
+  access_token: string;
+  expires_in: number;
 }
 
 @Injectable()
@@ -73,7 +93,7 @@ export class AirtelService {
     try {
       const token = await this.getAccessToken();
 
-      const response = await this.client.post(
+      const response = await this.client.post<AirtelApiResponse>(
         '/merchant/v2/payments/',
         {
           reference: externalId,
@@ -109,11 +129,17 @@ export class AirtelService {
         transactionId: txData?.id,
         status: txData?.status === 'TS' ? 'SUCCESS' : 'PENDING',
       };
-    } catch (error: any) {
-      this.logger.error(
-        `Airtel Request to Pay failed: ${error.message}`,
-        error.response?.data,
-      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `Airtel Request to Pay failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(
+          `Airtel Request to Pay failed: ${(error as Error).message}`,
+        );
+      }
       throw error;
     }
   }
@@ -139,7 +165,7 @@ export class AirtelService {
     try {
       const token = await this.getAccessToken();
 
-      const response = await this.client.get(
+      const response = await this.client.get<AirtelApiResponse>(
         `/standard/v1/payments/${transactionId}`,
         {
           headers: {
@@ -155,7 +181,9 @@ export class AirtelService {
       let status: AirtelPaymentStatusResult['status'] = 'PENDING';
       if (txData?.status === 'TS') status = 'SUCCESS';
       else if (txData?.status === 'TF') status = 'FAILED';
-      else status = txData?.status || 'PENDING';
+      else
+        status =
+          (txData?.status as AirtelPaymentStatusResult['status']) || 'PENDING';
 
       this.logger.log(`Airtel payment ${transactionId} status: ${status}`);
 
@@ -165,11 +193,17 @@ export class AirtelService {
         status,
         message: response.data?.status?.message || '',
       };
-    } catch (error: any) {
-      this.logger.error(
-        `Airtel check status failed: ${error.message}`,
-        error.response?.data,
-      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `Airtel check status failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(
+          `Airtel check status failed: ${(error as Error).message}`,
+        );
+      }
       throw error;
     }
   }
@@ -194,7 +228,7 @@ export class AirtelService {
     try {
       const token = await this.getAccessToken();
 
-      const response = await this.client.post(
+      await this.client.post(
         '/standard/v2/disbursements/',
         {
           payee: {
@@ -222,11 +256,17 @@ export class AirtelService {
         `Airtel Disbursement initiated: ${referenceId} for ${amount} ${currency}`,
       );
       return { referenceId, status: 'PENDING' };
-    } catch (error: any) {
-      this.logger.error(
-        `Airtel Disbursement failed: ${error.message}`,
-        error.response?.data,
-      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `Airtel Disbursement failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(
+          `Airtel Disbursement failed: ${(error as Error).message}`,
+        );
+      }
       throw error;
     }
   }
@@ -240,20 +280,25 @@ export class AirtelService {
     }
 
     try {
-      const response = await this.client.post('/auth/oauth2/token', {
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        grant_type: 'client_credentials',
-      });
+      const response = await this.client.post<AirtelTokenResponse>(
+        '/auth/oauth2/token',
+        {
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          grant_type: 'client_credentials',
+        },
+      );
 
       this.accessToken = response.data.access_token;
       const expiresIn = (response.data.expires_in || 3600) - 60;
       this.tokenExpiry = new Date(Date.now() + expiresIn * 1000);
 
       this.logger.log('Airtel access token refreshed');
-      return this.accessToken!;
-    } catch (error: any) {
-      this.logger.error(`Airtel token request failed: ${error.message}`);
+      return this.accessToken;
+    } catch (error) {
+      this.logger.error(
+        `Airtel token request failed: ${(error as Error).message}`,
+      );
       throw error;
     }
   }

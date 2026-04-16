@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
+import { Prisma, WasteType } from '@prisma/client';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
 import {
   SendOtpDto,
@@ -15,6 +16,7 @@ import {
   GoogleLoginDto,
 } from './dto';
 import { FirebaseService } from '../../integrations/firebase/firebase.service';
+import * as admin from 'firebase-admin';
 import { JwtPayload } from './strategies/jwt.strategy';
 import {
   ECOPOINTS,
@@ -22,7 +24,6 @@ import {
   BIN_WASTE_TYPES,
   BIN_QR_PREFIX,
 } from '../../common/constants';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class AuthService {
@@ -65,9 +66,11 @@ export class AuthService {
       this.logger.log(
         `Twilio Verify OTP sent to ${phone} — status: ${result.status}`,
       );
-    } catch (error: any) {
+    } catch (error) {
       // Twilio rate-limit & invalid-number errors already have clear messages
-      this.logger.error(`Twilio sendVerification failed: ${error.message}`);
+      this.logger.error(
+        `Twilio sendVerification failed: ${(error as Error).message}`,
+      );
       throw new BadRequestException(
         'Failed to send OTP. Please check the phone number and try again.',
       );
@@ -92,8 +95,10 @@ export class AuthService {
     let verification: { valid: boolean; status: string };
     try {
       verification = await this.twilioService.checkVerification(phone, otp);
-    } catch (error: any) {
-      this.logger.error(`Twilio checkVerification failed: ${error.message}`);
+    } catch (error) {
+      this.logger.error(
+        `Twilio checkVerification failed: ${(error as Error).message}`,
+      );
       throw new BadRequestException(
         'Verification failed. Please request a new OTP.',
       );
@@ -272,11 +277,13 @@ export class AuthService {
     const { idToken, email, displayName, photoUrl, fcmToken } = dto;
 
     // 1. Verify token with Firebase
-    let decodedToken;
+    let decodedToken: admin.auth.DecodedIdToken;
     try {
       decodedToken = await this.firebaseService.verifyIdToken(idToken);
     } catch (error) {
-      this.logger.error(`Firebase token verification failed: ${error.message}`);
+      this.logger.error(
+        `Firebase token verification failed: ${(error as Error).message}`,
+      );
       throw new UnauthorizedException('Invalid Google ID Token');
     }
 
@@ -330,7 +337,7 @@ export class AuthService {
       this.logger.log(`New user registered via Google: ${email}`);
     } else {
       // Update profile info from Google if missing
-      const updateData: any = {};
+      const updateData: Prisma.UserUpdateInput = {};
       if (!user.firstName && displayName)
         updateData.firstName = displayName.split(' ')[0];
       if (!user.avatarUrl && photoUrl) updateData.avatarUrl = photoUrl;
@@ -417,23 +424,22 @@ export class AuthService {
       type: 'refresh',
     };
 
-    const accessToken = this.jwtService.sign(
-      accessPayload as any,
-      {
-        secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_EXPIRY') || '24h',
-      } as any,
-    );
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const accessToken = this.jwtService.sign(accessPayload as any, {
+      secret: this.configService.get<string>('JWT_SECRET'),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      expiresIn: (this.configService.get<string>('JWT_EXPIRY') || '24h') as any,
+    });
 
     const refreshExpiry =
       this.configService.get<string>('JWT_REFRESH_EXPIRY') || '7d';
-    const refreshToken = this.jwtService.sign(
-      refreshPayload as Record<string, any>,
-      {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: refreshExpiry,
-      } as any,
-    );
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const refreshToken = this.jwtService.sign(refreshPayload as any, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      expiresIn: refreshExpiry as any,
+    });
 
     const expiresAt = this.calculateTokenExpiry(refreshExpiry);
 
@@ -504,11 +510,13 @@ export class AuthService {
     // Generate a 3-char prefix from userId
     const userPrefix = userId.substring(0, 3).toUpperCase();
 
-    const binData = BIN_WASTE_TYPES.map((wasteType) => ({
-      userId,
-      wasteType: wasteType as any,
-      qrCode: this.generateBinQrCode(userPrefix),
-    }));
+    const binData: Prisma.BinCreateManyInput[] = BIN_WASTE_TYPES.map(
+      (wasteType) => ({
+        userId,
+        wasteType: wasteType as WasteType,
+        qrCode: this.generateBinQrCode(userPrefix),
+      }),
+    );
 
     await this.prisma.bin.createMany({ data: binData });
 

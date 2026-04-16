@@ -19,6 +19,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
+import type { WebhookBody } from './payments.service';
 import { InitiatePaymentDto } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
@@ -124,7 +125,7 @@ export class PaymentsController {
     description: 'Webhook processed successfully',
     schema: { example: { received: true } },
   })
-  async momoWebhook(@Body() body: any) {
+  async momoWebhook(@Body() body: WebhookBody) {
     return this.paymentsService.handleWebhook('momo', body);
   }
 
@@ -152,7 +153,7 @@ export class PaymentsController {
     description: 'Webhook processed successfully',
     schema: { example: { received: true } },
   })
-  async airtelWebhook(@Body() body: any) {
+  async airtelWebhook(@Body() body: WebhookBody) {
     return this.paymentsService.handleWebhook('airtel', body);
   }
 }

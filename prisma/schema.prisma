@@ -201,6 +201,8 @@ model Payment {
   method         PaymentMethod
   status         PaymentStatus @default(PENDING)
   paidAt         DateTime?
+  failedAt       DateTime?
+  failReason     String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

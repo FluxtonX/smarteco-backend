@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsIn, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ReportBinDto {

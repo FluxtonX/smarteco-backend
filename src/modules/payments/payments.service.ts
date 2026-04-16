@@ -13,6 +13,17 @@ import { PaymentStatus, PaymentMethod } from '@prisma/client';
 import { PaginationDto } from '../../common/dto';
 import { v4 as uuidv4 } from 'uuid';
 
+export interface WebhookBody {
+  externalId?: string;
+  status?: string;
+  reason?: string;
+  transaction?: {
+    id?: string;
+    status_code?: string;
+    message?: string;
+  };
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -118,14 +129,16 @@ export class PaymentsService {
           status: 'PENDING',
         },
       };
-    } catch (error: any) {
+    } catch (error) {
       // Mark payment as failed
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { status: PaymentStatus.FAILED },
       });
 
-      this.logger.error(`Payment initiation failed: ${error.message}`);
+      this.logger.error(
+        `Payment initiation failed: ${(error as Error).message}`,
+      );
       throw new BadRequestException(
         'Payment request failed. Please try again.',
       );
@@ -168,13 +181,18 @@ export class PaymentsService {
           const result = await this.airtelService.checkPaymentStatus(
             payment.externalRef,
           );
-          providerStatus = result.status === 'SUCCESS' ? 'SUCCESSFUL' : result.status;
+          providerStatus =
+            result.status === 'SUCCESS' ? 'SUCCESSFUL' : result.status;
           failureReason = result.message;
         }
 
         // Update status based on provider response
-        const isSuccessful = ['SUCCESSFUL', 'SUCCESS', 'TS'].includes(providerStatus.toUpperCase());
-        const isFailed = ['FAILED', 'REJECTED', 'EXPIRED', 'TF'].includes(providerStatus.toUpperCase());
+        const isSuccessful = ['SUCCESSFUL', 'SUCCESS', 'TS'].includes(
+          providerStatus.toUpperCase(),
+        );
+        const isFailed = ['FAILED', 'REJECTED', 'EXPIRED', 'TF'].includes(
+          providerStatus.toUpperCase(),
+        );
 
         if (isSuccessful) {
           await this.prisma.payment.update({
@@ -188,17 +206,17 @@ export class PaymentsService {
         } else if (isFailed) {
           await this.prisma.payment.update({
             where: { id: payment.id },
-            data: { 
+            data: {
               status: PaymentStatus.FAILED,
               failReason: failureReason,
               failedAt: new Date(),
             },
           });
           payment.status = PaymentStatus.FAILED;
-          (payment as any).failReason = failureReason;
+          payment.failReason = failureReason ?? null;
         }
-      } catch (error: any) {
-        this.logger.error(`Status check failed: ${error.message}`);
+      } catch (error) {
+        this.logger.error(`Status check failed: ${(error as Error).message}`);
         // Don't throw — just return current status
       }
     }
@@ -212,7 +230,7 @@ export class PaymentsService {
         currency: payment.currency,
         method: payment.method,
         status: payment.status,
-        failReason: (payment as any).failReason,
+        failReason: payment.failReason,
         paidAt: payment.paidAt,
         failedAt: payment.failedAt,
         pickup: payment.pickup,
@@ -266,7 +284,7 @@ export class PaymentsService {
 
   // ─── WEBHOOK CALLBACK (MoMo/Airtel) ─────────────
 
-  async handleWebhook(provider: string, body: any) {
+  async handleWebhook(provider: string, body: WebhookBody) {
     this.logger.log(
       `Payment webhook received from ${provider}: ${JSON.stringify(body)}`,
     );
@@ -278,7 +296,7 @@ export class PaymentsService {
     if (provider === 'momo') {
       // MTN MoMo callback
       transactionRef = body.externalId;
-      status = body.status; // SUCCESSFUL or FAILED
+      status = body.status || 'PENDING'; // SUCCESSFUL or FAILED
       reason = body.reason;
     } else if (provider === 'airtel') {
       // Airtel callback
@@ -312,15 +330,23 @@ export class PaymentsService {
       return { received: true };
     }
 
-    const isSuccessful = ['SUCCESSFUL', 'SUCCESS', 'TS'].includes(status.toUpperCase());
-    const isFailed = ['FAILED', 'REJECTED', 'EXPIRED', 'TF'].includes(status.toUpperCase());
+    const isSuccessful = ['SUCCESSFUL', 'SUCCESS', 'TS'].includes(
+      status.toUpperCase(),
+    );
+    const isFailed = ['FAILED', 'REJECTED', 'EXPIRED', 'TF'].includes(
+      status.toUpperCase(),
+    );
 
     if (!isSuccessful && !isFailed) {
-      this.logger.log(`Payment ${transactionRef} status ${status} ignored (still pending).`);
+      this.logger.log(
+        `Payment ${transactionRef} status ${status} ignored (still pending).`,
+      );
       return { received: true };
     }
 
-    const newStatus = isSuccessful ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
+    const newStatus = isSuccessful
+      ? PaymentStatus.COMPLETED
+      : PaymentStatus.FAILED;
 
     await this.prisma.payment.update({
       where: { id: payment.id },

@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { UpdatePickupStatusDto, UpdateLocationDto } from './dto';
 import { EcoPointsService } from '../eco-points/eco-points.service';
-import { PickupStatus, BinStatus } from '@prisma/client';
+import { PickupStatus, BinStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class CollectorsService {
@@ -141,7 +141,7 @@ export class CollectorsService {
     }
 
     // Build update data
-    const updateData: any = {
+    const updateData: Prisma.PickupUpdateInput = {
       status: dto.status as PickupStatus,
     };
 
@@ -206,12 +206,14 @@ export class CollectorsService {
 
         if (user?.referredBy) {
           // Check if this is the user's first completed pickup
+          /*
           const completedPickups = await this.prisma.pickup.count({
             where: {
               userId: pickup.userId,
               status: 'COMPLETED',
             },
           });
+          */
 
           // completedPickups will be 0 because we haven't saved yet
           // But the current pickup counts, so check if there were any before

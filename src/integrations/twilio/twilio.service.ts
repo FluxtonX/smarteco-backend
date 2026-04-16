@@ -21,7 +21,7 @@ export class TwilioService {
       );
     }
 
-    this.client = Twilio.default(accountSid!, authToken!);
+    this.client = Twilio.default(accountSid, authToken);
     this.logger.log('Twilio Verify service initialized');
   }
 
@@ -29,7 +29,9 @@ export class TwilioService {
    * Send an OTP verification code to the given phone number via SMS.
    * Twilio Verify handles code generation, expiry, and rate limiting.
    */
-  async sendVerification(phone: string): Promise<{ success: boolean; status: string }> {
+  async sendVerification(
+    phone: string,
+  ): Promise<{ success: boolean; status: string }> {
     try {
       const verification = await this.client.verify.v2
         .services(this.verifyServiceSid)
@@ -43,9 +45,9 @@ export class TwilioService {
       );
 
       return { success: true, status: verification.status };
-    } catch (error: any) {
+    } catch (error) {
       this.logger.error(
-        `Failed to send verification to ${phone}: ${error.message}`,
+        `Failed to send verification to ${phone}: ${(error as Error).message}`,
       );
       throw error;
     }
@@ -75,9 +77,9 @@ export class TwilioService {
         valid: verificationCheck.status === 'approved',
         status: verificationCheck.status,
       };
-    } catch (error: any) {
+    } catch (error) {
       this.logger.error(
-        `Failed to check verification for ${phone}: ${error.message}`,
+        `Failed to check verification for ${phone}: ${(error as Error).message}`,
       );
       throw error;
     }

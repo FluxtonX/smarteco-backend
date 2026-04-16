@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
+import { Pool } from 'pg';
 
 @Injectable()
 export class PrismaService
@@ -14,13 +14,13 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
-  private pool: pg.Pool;
+  private pool: Pool;
 
   constructor() {
     const connectionString = process.env.DATABASE_URL;
     const isProduction = process.env.NODE_ENV === 'production';
 
-    const pool = new pg.Pool({
+    const pool = new Pool({
       connectionString,
       ssl: isProduction ? { rejectUnauthorized: false } : false,
     });

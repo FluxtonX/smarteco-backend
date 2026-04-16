@@ -31,7 +31,6 @@ export class WhatsAppController {
     const reply = await this.whatsAppService.processIncoming(
       from || '',
       body || '',
-      messageSid || '',
     );
 
     // Respond with TwiML

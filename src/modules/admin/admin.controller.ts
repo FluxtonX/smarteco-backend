@@ -49,7 +49,12 @@ export class AdminController {
         success: true,
         data: {
           users: { total: 1240, active: 1185, newThisMonth: 78 },
-          pickups: { total: 5430, completed: 4890, pending: 120, cancelled: 420 },
+          pickups: {
+            total: 5430,
+            completed: 4890,
+            pending: 120,
+            cancelled: 420,
+          },
           revenue: { totalRwf: 2850000, thisMonthRwf: 387500 },
           ecoPoints: { totalIssued: 285000, totalRedeemed: 42000 },
           collectors: { total: 18, active: 15 },

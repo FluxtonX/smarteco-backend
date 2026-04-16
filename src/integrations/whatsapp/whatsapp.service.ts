@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+
+interface TwilioMessageResponse {
+  sid: string;
+  status: string;
+}
 
 @Injectable()
 export class WhatsAppService {
@@ -52,23 +57,34 @@ export class WhatsAppService {
       params.append('From', this.fromNumber);
       params.append('Body', body);
 
-      const response = await axios.post(twilioUrl, params.toString(), {
-        auth: {
-          username: this.accountSid,
-          password: this.authToken,
+      const response = await axios.post<TwilioMessageResponse>(
+        twilioUrl,
+        params.toString(),
+        {
+          auth: {
+            username: this.accountSid,
+            password: this.authToken,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
         },
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
+      );
 
       this.logger.log(`WhatsApp sent to ${to}: SID=${response.data.sid}`);
-      return { sid: response.data.sid, status: response.data.status };
-    } catch (error: any) {
-      this.logger.error(
-        `WhatsApp send failed: ${error.message}`,
-        error.response?.data,
-      );
+      return {
+        sid: response.data.sid,
+        status: response.data.status,
+      };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        this.logger.error(
+          `WhatsApp send failed: ${error.message}`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error(`WhatsApp send failed: ${(error as Error).message}`);
+      }
       throw error;
     }
   }
@@ -76,11 +92,7 @@ export class WhatsAppService {
   // ─── PROCESS INCOMING WHATSAPP MESSAGE ──────────
   // Twilio webhook handler — receives user messages and returns replies
 
-  async processIncoming(
-    from: string,
-    body: string,
-    messageSid: string,
-  ): Promise<string> {
+  async processIncoming(from: string, body: string): Promise<string> {
     const phone = from.replace('whatsapp:', '');
     const input = body.trim().toLowerCase();
 
@@ -128,8 +140,10 @@ export class WhatsAppService {
 
       // Default — show menu
       return this.mainMenu(user.firstName || 'there');
-    } catch (error: any) {
-      this.logger.error(`WhatsApp processing error: ${error.message}`);
+    } catch (error) {
+      this.logger.error(
+        `WhatsApp processing error: ${(error as Error).message}`,
+      );
       return this.buildResponse([
         '❌ Something went wrong.',
         'Please try again or contact support at +250788000000',

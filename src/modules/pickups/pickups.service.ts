@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePickupDto, CancelPickupDto, PickupQueryDto } from './dto';
+
 import {
   PICKUP_REFERENCE_PREFIX,
   PICKUP_REFERENCE_LENGTH,
@@ -15,9 +16,34 @@ import {
   PICKUP_PRICES,
   DEFAULT_CURRENCY,
 } from '../../common/constants';
-import { PickupStatus, WasteType, PaymentMethod, PaymentStatus } from '@prisma/client';
+import {
+  PickupStatus,
+  WasteType,
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { MomoService } from '../../integrations/momo/momo.service';
 import { AirtelService } from '../../integrations/airtel/airtel.service';
+
+type CollectorWithUser = Prisma.CollectorProfileGetPayload<{
+  include: {
+    user: {
+      select: {
+        firstName: true;
+        lastName: true;
+        phone: true;
+      };
+    };
+  };
+}>;
+
+type PickupWithDetails = Prisma.PickupGetPayload<object> & {
+  collector?: CollectorWithUser | null;
+  payment?: Record<string, unknown> | null;
+  bin?: Record<string, unknown> | null;
+};
 
 @Injectable()
 export class PickupsService {
@@ -88,19 +114,19 @@ export class PickupsService {
           plate: 'RBA 456C',
           rating: 4.6,
           lat: -1.9501,
-          lon: 30.0700,
+          lon: 30.07,
         },
       ];
 
       for (const c of defaultCollectors) {
         const user = await this.prisma.user.upsert({
           where: { phone: c.phone },
-          update: { role: 'COLLECTOR' as any },
+          update: { role: 'COLLECTOR' as UserRole },
           create: {
             phone: c.phone,
             firstName: c.firstName,
             lastName: c.lastName,
-            role: 'COLLECTOR' as any,
+            role: 'COLLECTOR' as UserRole,
             referralCode: `COLL-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
           },
         });
@@ -135,9 +161,11 @@ export class PickupsService {
 
     // Calculate payment amount
     const amount = PICKUP_PRICES[dto.wasteType] || 100;
-    
+
     // Determine currency: Sandbox MoMo usually requires EUR, production uses RWF
-    const isSandbox = process.env.MOMO_BASE_URL?.includes('sandbox') || !process.env.MOMO_API_KEY;
+    const isSandbox =
+      process.env.MOMO_BASE_URL?.includes('sandbox') ||
+      !process.env.MOMO_API_KEY;
     const currency = isSandbox ? 'EUR' : DEFAULT_CURRENCY;
 
     // Fetch user for phone number
@@ -156,8 +184,10 @@ export class PickupsService {
     // Initiate Payment
     let paymentRef: string | null = null;
     try {
-      this.logger.log(`Initiating ${method} payment for pickup ${reference}: ${amount} ${currency}`);
-      
+      this.logger.log(
+        `Initiating ${method} payment for pickup ${reference}: ${amount} ${currency}`,
+      );
+
       if (method === PaymentMethod.MTN_MOMO) {
         const momoResult = await this.momoService.requestToPay(
           amount,
@@ -177,9 +207,13 @@ export class PickupsService {
         );
         paymentRef = airtelResult.referenceId;
       }
-    } catch (error: any) {
-      this.logger.error(`Failed to initiate ${method} payment for ${reference}: ${error.message}`);
-      throw new BadRequestException(`${method} payment initiation failed. Please check your phone or try again.`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to initiate ${method} payment for ${reference}: ${(error as Error).message}`,
+      );
+      throw new BadRequestException(
+        `${method} payment initiation failed. Please check your phone or try again.`,
+      );
     }
 
     // Create the pickup and linked payment record
@@ -266,7 +300,7 @@ export class PickupsService {
   // ─── GET PICKUPS (LIST) ─────────────────────────
 
   async getPickups(userId: string, query: PickupQueryDto) {
-    const where: any = { userId };
+    const where: Prisma.PickupWhereInput = { userId };
 
     // Apply filters
     if (query.status) {
@@ -301,7 +335,9 @@ export class PickupsService {
         where,
         skip: query.skip,
         take: query.limit,
-        orderBy: { [sortBy]: query.sortOrder },
+        orderBy: {
+          [sortBy]: query.sortOrder,
+        } as Prisma.PickupOrderByWithRelationInput,
         include: {
           collector: {
             include: {
@@ -611,7 +647,12 @@ export class PickupsService {
    * 2. Among equally close collectors, pick the one with fewest total pickups
    */
   private findBestCollector(
-    collectors: { id: string; latitude: number | null; longitude: number | null; totalPickups: number }[],
+    collectors: {
+      id: string;
+      latitude: number | null;
+      longitude: number | null;
+      totalPickups: number;
+    }[],
     pickupLat: number,
     pickupLon: number,
   ) {
@@ -648,7 +689,7 @@ export class PickupsService {
     return bestCollector;
   }
 
-  private formatCollector(collector: any) {
+  private formatCollector(collector: CollectorWithUser) {
     return {
       id: collector.id,
       name: collector.user
@@ -663,7 +704,7 @@ export class PickupsService {
     };
   }
 
-  private formatPickup(pickup: any) {
+  private formatPickup(pickup: PickupWithDetails) {
     return {
       id: pickup.id,
       reference: pickup.reference,
@@ -679,8 +720,8 @@ export class PickupsService {
       collector: pickup.collector
         ? this.formatCollector(pickup.collector)
         : null,
-      payment: pickup.payment || null,
-      bin: pickup.bin || null,
+      payment: (pickup.payment as Record<string, unknown>) || null,
+      bin: (pickup.bin as Record<string, unknown>) || null,
       completedAt: pickup.completedAt,
       cancelledAt: pickup.cancelledAt,
       cancelReason: pickup.cancelReason,

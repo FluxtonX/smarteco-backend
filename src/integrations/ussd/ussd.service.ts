@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
-import { PickupStatus } from '@prisma/client';
+import { PickupStatus, WasteType, TimeSlot } from '@prisma/client';
 
 // USSD session state
 interface UssdSession {
@@ -32,7 +32,6 @@ export class UssdService {
   ): Promise<string> {
     // Parse input — Africa's Talking sends cumulative text separated by *
     const inputs = text ? text.split('*') : [];
-    const currentInput = inputs[inputs.length - 1] || '';
     const level = inputs.length;
 
     this.logger.log(
@@ -51,7 +50,7 @@ export class UssdService {
         case '1':
           return this.handleSchedulePickup(phone, inputs, level);
         case '2':
-          return this.handleCheckStatus(phone, inputs, level);
+          return this.handleCheckStatus(phone);
         case '3':
           return this.handleEcoPoints(phone);
         case '4':
@@ -61,8 +60,10 @@ export class UssdService {
         default:
           return 'END Invalid option. Please try again.';
       }
-    } catch (error: any) {
-      this.logger.error(`USSD Error [${sessionId}]: ${error.message}`);
+    } catch (error) {
+      this.logger.error(
+        `USSD Error [${sessionId}]: ${(error as Error).message}`,
+      );
       return 'END An error occurred. Please try again later.';
     }
   }
@@ -176,9 +177,9 @@ export class UssdService {
         data: {
           reference,
           userId: user.id,
-          wasteType: wasteTypes[wasteIdx] as any,
+          wasteType: wasteTypes[wasteIdx] as WasteType,
           scheduledDate,
-          timeSlot: timeSlots[timeIdx] as any,
+          timeSlot: timeSlots[timeIdx] as TimeSlot,
           status: PickupStatus.PENDING,
           address: lastPickup?.address || 'Via USSD',
           latitude: lastPickup?.latitude || 0,
@@ -195,11 +196,7 @@ export class UssdService {
 
   // ─── 2. CHECK PICKUP STATUS ─────────────────────
 
-  private async handleCheckStatus(
-    phone: string,
-    inputs: string[],
-    level: number,
-  ): Promise<string> {
+  private async handleCheckStatus(phone: string): Promise<string> {
     const user = await this.prisma.user.findUnique({ where: { phone } });
     if (!user) {
       return 'END You are not registered. Download the SmartEco app to register.';

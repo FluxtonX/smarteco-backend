@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto } from './dto';
 import { PaginationDto } from '../../common/dto';
-import { UserRole } from '@prisma/client';
+import { UserRole, Prisma } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -148,7 +148,7 @@ export class AdminService {
   // ─── LIST USERS ─────────────────────────────────
 
   async getUsers(query: AdminUserQueryDto) {
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
 
     if (query.search) {
       where.OR = [
@@ -216,7 +216,7 @@ export class AdminService {
       throw new NotFoundException('User not found.');
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.UserUpdateInput = {};
     if (dto.role !== undefined) updateData.role = dto.role;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
@@ -404,12 +404,13 @@ export class AdminService {
   // ─── PICKUP ANALYTICS ───────────────────────────
 
   async getPickupAnalytics(from?: string, to?: string) {
-    const where: any = { status: 'COMPLETED' };
+    const where: Prisma.PickupWhereInput = { status: 'COMPLETED' };
 
     if (from || to) {
-      where.completedAt = {};
-      if (from) where.completedAt.gte = new Date(from);
-      if (to) where.completedAt.lte = new Date(to);
+      const completedAt: Prisma.DateTimeFilter = {};
+      if (from) completedAt.gte = new Date(from);
+      if (to) completedAt.lte = new Date(to);
+      where.completedAt = completedAt;
     }
 
     const [byWasteType, byTimeSlot, totalWeight] = await Promise.all([
@@ -452,12 +453,13 @@ export class AdminService {
   // ─── REVENUE ANALYTICS ──────────────────────────
 
   async getRevenueAnalytics(from?: string, to?: string) {
-    const where: any = { status: 'COMPLETED' };
+    const where: Prisma.PaymentWhereInput = { status: 'COMPLETED' };
 
     if (from || to) {
-      where.paidAt = {};
-      if (from) where.paidAt.gte = new Date(from);
-      if (to) where.paidAt.lte = new Date(to);
+      const paidAt: Prisma.DateTimeFilter = {};
+      if (from) paidAt.gte = new Date(from);
+      if (to) paidAt.lte = new Date(to);
+      where.paidAt = paidAt;
     }
 
     const [byMethod, totalRevenue] = await Promise.all([

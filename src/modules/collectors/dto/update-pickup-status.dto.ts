@@ -1,6 +1,5 @@
-import { IsEnum, IsOptional, IsNumber, IsString } from 'class-validator';
+import { IsOptional, IsNumber, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PickupStatus } from '@prisma/client';
 
 export class UpdatePickupStatusDto {
   @ApiProperty({

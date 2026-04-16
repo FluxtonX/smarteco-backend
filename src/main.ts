@@ -88,7 +88,8 @@ All responses follow a consistent format:
         scheme: 'bearer',
         bearerFormat: 'JWT',
         name: 'JWT',
-        description: 'Enter JWT access token obtained from /auth/otp/verify or /auth/google',
+        description:
+          'Enter JWT access token obtained from /auth/otp/verify or /auth/google',
         in: 'header',
       },
       'JWT-auth',
@@ -132,4 +133,8 @@ All responses follow a consistent format:
   );
 }
 
-bootstrap();
+bootstrap().catch((err: Error) => {
+  const logger = new Logger('Bootstrap');
+  logger.error(`Error during server bootstrap: ${err.message}`, err.stack);
+  process.exit(1);
+});

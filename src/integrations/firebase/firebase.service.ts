@@ -1,35 +1,41 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class FirebaseService implements OnModuleInit {
   private readonly logger = new Logger(FirebaseService.name);
-  private firebaseApp: admin.app.App;
+  private firebaseApp: admin.app.App | undefined;
 
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
-    const serviceAccount = this.configService.get<string>('FIREBASE_SERVICE_ACCOUNT');
-    
+    const serviceAccount = this.configService.get<string>(
+      'FIREBASE_SERVICE_ACCOUNT',
+    );
+
     if (!serviceAccount) {
-      this.logger.warn('FIREBASE_SERVICE_ACCOUNT not found in environment variables. Firebase features will be disabled.');
+      this.logger.warn(
+        'FIREBASE_SERVICE_ACCOUNT not found in environment variables. Firebase features will be disabled.',
+      );
       return;
     }
 
     try {
-      let config: any;
+      let config: admin.ServiceAccount;
       if (serviceAccount.trim().startsWith('{')) {
-        config = JSON.parse(serviceAccount);
+        config = JSON.parse(serviceAccount) as admin.ServiceAccount;
       } else {
         // Assume it's a path if it doesn't look like JSON
-        const fs = require('fs');
-        const path = require('path');
-        const absolutePath = path.isAbsolute(serviceAccount) 
-          ? serviceAccount 
+        const absolutePath = path.isAbsolute(serviceAccount)
+          ? serviceAccount
           : path.join(process.cwd(), serviceAccount);
-        
-        config = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+
+        config = JSON.parse(
+          fs.readFileSync(absolutePath, 'utf8'),
+        ) as admin.ServiceAccount;
       }
 
       this.firebaseApp = admin.initializeApp({
@@ -37,7 +43,12 @@ export class FirebaseService implements OnModuleInit {
       });
       this.logger.log('Firebase Admin SDK initialized successfully');
     } catch (error) {
-      this.logger.error('Failed to initialize Firebase Admin SDK', error.stack);
+      const errorMessage =
+        error instanceof Error ? error.stack : 'Unknown error';
+      this.logger.error(
+        'Failed to initialize Firebase Admin SDK',
+        errorMessage,
+      );
     }
   }
 
