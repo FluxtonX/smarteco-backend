@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
+import { FirebaseModule } from '../../integrations/firebase/firebase.module';
 
 @Module({
+  imports: [FirebaseModule],
   controllers: [NotificationsController],
   providers: [NotificationsService],
   exports: [NotificationsService],

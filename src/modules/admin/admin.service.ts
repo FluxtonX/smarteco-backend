@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto } from './dto';
+import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, AssignCollectorDto, ApproveCollectorDto } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { UserRole, Prisma } from '@prisma/client';
 
@@ -309,6 +309,44 @@ export class AdminService {
     };
   }
 
+  // ─── ASSIGN COLLECTOR ───────────────────────────
+
+  async assignCollector(pickupId: string, dto: AssignCollectorDto) {
+    const pickup = await this.prisma.pickup.findUnique({
+      where: { id: pickupId },
+    });
+
+    if (!pickup) {
+      throw new NotFoundException('Pickup not found');
+    }
+
+    const collector = await this.prisma.collectorProfile.findUnique({
+      where: { id: dto.collectorId },
+    });
+
+    if (!collector) {
+      throw new NotFoundException('Collector not found');
+    }
+
+    const updatedPickup = await this.prisma.pickup.update({
+      where: { id: pickupId },
+      data: {
+        collectorId: dto.collectorId,
+        status: 'COLLECTOR_ASSIGNED',
+      },
+    });
+
+    this.logger.log(
+      `Admin assigned collector ${dto.collectorId} to pickup ${pickupId}`,
+    );
+
+    return {
+      success: true,
+      message: 'Collector assigned successfully',
+      data: updatedPickup,
+    };
+  }
+
   // ─── LIST COLLECTORS ────────────────────────────
 
   async getCollectors() {
@@ -339,6 +377,8 @@ export class AdminService {
         rating: c.rating,
         totalPickups: c.totalPickups,
         isAvailable: c.isAvailable,
+        isApproved: c.isApproved,
+        approvedAt: c.approvedAt,
         isActive: c.user.isActive,
       })),
     };
@@ -375,13 +415,15 @@ export class AdminService {
       data: { role: UserRole.COLLECTOR },
     });
 
-    // Create collector profile
+    // Create collector profile (admin-created = auto-approved)
     const collectorProfile = await this.prisma.collectorProfile.create({
       data: {
         userId: user.id,
         vehiclePlate: dto.vehiclePlate,
         zone: dto.zone,
         photoUrl: dto.photoUrl,
+        isApproved: true,
+        approvedAt: new Date(),
       },
     });
 
@@ -488,5 +530,108 @@ export class AdminService {
         })),
       },
     };
+  }
+
+  // ─── GET PENDING COLLECTORS ─────────────────────
+
+  async getPendingCollectors() {
+    const collectors = await this.prisma.collectorProfile.findMany({
+      where: { isApproved: false },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            avatarUrl: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: collectors.map((c) => ({
+        id: c.id,
+        userId: c.userId,
+        name: `${c.user.firstName || ''} ${c.user.lastName || ''}`.trim(),
+        phone: c.user.phone,
+        email: c.user.email,
+        avatarUrl: c.user.avatarUrl,
+        vehiclePlate: c.vehiclePlate,
+        zone: c.zone,
+        photoUrl: c.photoUrl,
+        createdAt: c.createdAt,
+        userCreatedAt: c.user.createdAt,
+      })),
+    };
+  }
+
+  // ─── APPROVE / REJECT COLLECTOR ─────────────────
+
+  async approveCollector(
+    collectorProfileId: string,
+    adminUserId: string,
+    dto: ApproveCollectorDto,
+  ) {
+    const collector = await this.prisma.collectorProfile.findUnique({
+      where: { id: collectorProfileId },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, phone: true },
+        },
+      },
+    });
+
+    if (!collector) {
+      throw new NotFoundException('Collector profile not found.');
+    }
+
+    if (dto.approved) {
+      // Approve: set isApproved, update user role to COLLECTOR
+      await this.prisma.$transaction([
+        this.prisma.collectorProfile.update({
+          where: { id: collectorProfileId },
+          data: {
+            isApproved: true,
+            approvedAt: new Date(),
+            approvedBy: adminUserId,
+          },
+        }),
+        this.prisma.user.update({
+          where: { id: collector.userId },
+          data: { role: UserRole.COLLECTOR },
+        }),
+      ]);
+
+      this.logger.log(
+        `Admin ${adminUserId} approved collector ${collector.user.phone} (${collectorProfileId})`,
+      );
+
+      return {
+        success: true,
+        message: `Collector ${collector.user.firstName || collector.user.phone} approved successfully`,
+        data: { id: collectorProfileId, isApproved: true },
+      };
+    } else {
+      // Reject: remove the collector profile, keep user as USER
+      await this.prisma.collectorProfile.delete({
+        where: { id: collectorProfileId },
+      });
+
+      this.logger.log(
+        `Admin ${adminUserId} rejected collector ${collector.user.phone}. Reason: ${dto.reason || 'No reason provided'}`,
+      );
+
+      return {
+        success: true,
+        message: `Collector application rejected${dto.reason ? ': ' + dto.reason : ''}`,
+        data: { id: collectorProfileId, isApproved: false },
+      };
+    }
   }
 }

@@ -157,6 +157,43 @@ export class PickupsController {
     return this.pickupsService.getPickup(userId, pickupId);
   }
 
+  @Get(':id/collector-location')
+  @ApiOperation({
+    summary: 'Get assigned collector location',
+    description:
+      "Returns the assigned collector's live GPS coordinates and ETA for a specific pickup. Used for real-time tracking on the user side.",
+  })
+  @ApiParam({ name: 'id', description: 'Pickup UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Collector location retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          collector: {
+            id: 'uuid',
+            name: 'Patrick Mugisha',
+            phone: '+250788111222',
+            vehiclePlate: 'RAD 123A',
+            rating: 4.8,
+            latitude: -1.9456,
+            longitude: 29.8801,
+          },
+          pickupStatus: 'EN_ROUTE',
+          eta: { minutes: 8, distanceKm: 2.4 },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Pickup not found' })
+  async getCollectorLocation(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) pickupId: string,
+  ) {
+    return this.pickupsService.getCollectorLocation(userId, pickupId);
+  }
+
   @Patch(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

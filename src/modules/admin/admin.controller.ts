@@ -20,12 +20,13 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto } from './dto';
+import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, AssignCollectorDto, ApproveCollectorDto } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { CurrentUser } from '../../common/decorators';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -162,6 +163,25 @@ export class AdminController {
     return this.adminService.getPickups(query);
   }
 
+  @Post('pickups/:id/assign')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Assign collector to pickup',
+    description: 'Admin assigns a specific collector to a pickup. Admin only.',
+  })
+  @ApiParam({ name: 'id', description: 'Pickup UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Collector assigned successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Pickup or Collector not found' })
+  async assignCollector(
+    @Param('id', ParseUUIDPipe) pickupId: string,
+    @Body() dto: AssignCollectorDto,
+  ) {
+    return this.adminService.assignCollector(pickupId, dto);
+  }
+
   @Get('collectors')
   @ApiOperation({
     summary: 'List all collectors',
@@ -223,6 +243,65 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Admin access required' })
   async createCollector(@Body() dto: CreateCollectorDto) {
     return this.adminService.createCollector(dto);
+  }
+
+  @Get('collectors/pending')
+  @ApiOperation({
+    summary: 'List pending collector applications',
+    description:
+      'Returns all collector profiles that are awaiting admin approval. Admin only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pending collectors list retrieved',
+    schema: {
+      example: {
+        success: true,
+        data: [
+          {
+            id: 'uuid',
+            name: 'Marie Claire',
+            phone: '+250788555666',
+            vehiclePlate: 'RCA 789D',
+            zone: 'Kigali-South',
+            createdAt: '2026-04-29T10:00:00Z',
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
+  async getPendingCollectors() {
+    return this.adminService.getPendingCollectors();
+  }
+
+  @Patch('collectors/:id/approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Approve or reject a collector application',
+    description:
+      'Approve (sets role to COLLECTOR, isApproved=true) or reject (deletes collector profile) a pending collector application. Admin only.',
+  })
+  @ApiParam({ name: 'id', description: 'Collector Profile UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Collector approved/rejected',
+    schema: {
+      example: {
+        success: true,
+        message: 'Collector Marie approved successfully',
+        data: { id: 'uuid', isApproved: true },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Collector not found' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
+  async approveCollector(
+    @Param('id', ParseUUIDPipe) collectorId: string,
+    @CurrentUser('id') adminUserId: string,
+    @Body() dto: ApproveCollectorDto,
+  ) {
+    return this.adminService.approveCollector(collectorId, adminUserId, dto);
   }
 
   @Get('analytics/pickups')

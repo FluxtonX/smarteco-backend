@@ -26,6 +26,7 @@ import {
 } from '@prisma/client';
 import { MomoService } from '../../integrations/momo/momo.service';
 import { AirtelService } from '../../integrations/airtel/airtel.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type CollectorWithUser = Prisma.CollectorProfileGetPayload<{
   include: {
@@ -53,6 +54,7 @@ export class PickupsService {
     private readonly prisma: PrismaService,
     private readonly momoService: MomoService,
     private readonly airtelService: AirtelService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ─── CREATE PICKUP ──────────────────────────────
@@ -90,7 +92,7 @@ export class PickupsService {
 
     // Ensure at least some collectors exist (for simulation)
     let collectors = await this.prisma.collectorProfile.findMany({
-      where: { isAvailable: true },
+      where: { isAvailable: true, isApproved: true },
     });
 
     if (collectors.length === 0) {
@@ -133,7 +135,7 @@ export class PickupsService {
 
         await this.prisma.collectorProfile.upsert({
           where: { userId: user.id },
-          update: { isAvailable: true, latitude: c.lat, longitude: c.lon },
+          update: { isAvailable: true, isApproved: true, latitude: c.lat, longitude: c.lon },
           create: {
             userId: user.id,
             vehiclePlate: c.plate,
@@ -142,13 +144,15 @@ export class PickupsService {
             latitude: c.lat,
             longitude: c.lon,
             isAvailable: true,
+            isApproved: true,
+            approvedAt: new Date(),
           },
         });
       }
 
       // Fetch again after seeding
       collectors = await this.prisma.collectorProfile.findMany({
-        where: { isAvailable: true },
+        where: { isAvailable: true, isApproved: true },
       });
     }
 
@@ -264,6 +268,16 @@ export class PickupsService {
     this.logger.log(
       `Pickup created: ${reference} with payment ${paymentRef} for user ${userId}`,
     );
+
+    if (assignedCollector) {
+      await this.notificationsService.createNotification(
+        assignedCollector.userId,
+        'New Pickup Assigned',
+        `A new ${dto.wasteType} waste pickup has been assigned to you at ${dto.address}.`,
+        'IN_APP',
+        { pickupId: pickup.id }
+      );
+    }
 
     return {
       success: true,
@@ -473,7 +487,7 @@ export class PickupsService {
     if (pickup.status === PickupStatus.PENDING && !pickup.collectorId) {
       this.logger.log(`Auto-assigning collector for pickup ${pickup.id}`);
       const collectors = await this.prisma.collectorProfile.findMany({
-        where: { isAvailable: true },
+        where: { isAvailable: true, isApproved: true },
       });
 
       if (collectors.length > 0) {
@@ -499,6 +513,15 @@ export class PickupsService {
             },
           },
         });
+
+        // Notify collector
+        await this.notificationsService.createNotification(
+          randomCollector.userId,
+          'New Pickup Assigned',
+          `A pending pickup has been automatically assigned to you.`,
+          'IN_APP',
+          { pickupId: pickup.id }
+        );
       }
     }
 
@@ -530,6 +553,77 @@ export class PickupsService {
       success: true,
       data: {
         ...data,
+        eta,
+      },
+    };
+  }
+
+  // ─── GET COLLECTOR LOCATION (for user tracking) ──
+
+  async getCollectorLocation(userId: string, pickupId: string) {
+    const pickup = await this.prisma.pickup.findUnique({
+      where: { id: pickupId },
+      include: {
+        collector: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!pickup) {
+      throw new NotFoundException('Pickup not found.');
+    }
+
+    if (pickup.userId !== userId) {
+      throw new ForbiddenException('You do not have access to this pickup.');
+    }
+
+    if (!pickup.collector) {
+      return {
+        success: true,
+        data: null,
+        message: 'No collector assigned yet.',
+      };
+    }
+
+    // Calculate ETA
+    let eta: { minutes: number; distanceKm: number } | null = null;
+    if (pickup.collector.latitude && pickup.collector.longitude) {
+      const distanceKm = this.haversineDistance(
+        pickup.collector.latitude,
+        pickup.collector.longitude,
+        pickup.latitude,
+        pickup.longitude,
+      );
+      const avgSpeedKmh = 30;
+      const minutes = Math.round((distanceKm / avgSpeedKmh) * 60);
+      eta = {
+        minutes,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        collector: {
+          id: pickup.collector.id,
+          name: `${pickup.collector.user.firstName || ''} ${pickup.collector.user.lastName || ''}`.trim(),
+          phone: pickup.collector.user.phone,
+          vehiclePlate: pickup.collector.vehiclePlate,
+          rating: pickup.collector.rating,
+          latitude: pickup.collector.latitude,
+          longitude: pickup.collector.longitude,
+        },
+        pickupStatus: pickup.status,
         eta,
       },
     };
@@ -649,6 +743,7 @@ export class PickupsService {
   private findBestCollector(
     collectors: {
       id: string;
+      userId: string;
       latitude: number | null;
       longitude: number | null;
       totalPickups: number;

@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationQueryDto } from './dto';
 import { NotificationType, Prisma } from '@prisma/client';
+import { FirebaseService } from '../../integrations/firebase/firebase.service';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly firebaseService: FirebaseService,
+  ) {}
 
   // ─── GET NOTIFICATIONS ──────────────────────────
 
@@ -115,8 +119,20 @@ export class NotificationsService {
 
     this.logger.log(`Notification created for user ${userId}: ${title}`);
 
-    // TODO: Send push notification via FCM
-    // TODO: Send SMS via Africa's Talking if type === SMS
+    // Fetch user to get FCM token
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { fcmToken: true },
+    });
+
+    if (user?.fcmToken) {
+      await this.firebaseService.sendPushNotification(
+        user.fcmToken,
+        title,
+        body,
+        data ? (data as Record<string, string>) : undefined,
+      );
+    }
 
     return notification;
   }
