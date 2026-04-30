@@ -143,18 +143,22 @@ model OtpVerification {
 }
 
 model CollectorProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique @map("user_id")
-  vehiclePlate String   @map("vehicle_plate")
-  zone         String
-  photoUrl     String?  @map("photo_url")
-  rating       Float    @default(0.0)
-  totalPickups Int      @default(0) @map("total_pickups")
-  isAvailable  Boolean  @default(true) @map("is_available")
-  latitude     Float?
-  longitude    Float?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  collectorName String?   @map("collector_name")
+  vehiclePlate  String    @map("vehicle_plate")
+  zone          String
+  photoUrl      String?   @map("photo_url")
+  rating        Float     @default(0.0)
+  totalPickups  Int       @default(0) @map("total_pickups")
+  isAvailable   Boolean   @default(true) @map("is_available")
+  isApproved    Boolean   @default(false) @map("is_approved")
+  approvedAt    DateTime? @map("approved_at")
+  approvedBy    String?   @map("approved_by")
+  latitude      Float?
+  longitude     Float?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
