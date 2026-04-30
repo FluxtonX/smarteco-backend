@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import axios, { AxiosError } from 'axios';
+import { getWhatsAppTemplates } from './whatsapp-templates';
 
 interface TwilioMessageResponse {
   sid: string;
@@ -14,6 +15,8 @@ export class WhatsAppService {
   private readonly accountSid: string;
   private readonly authToken: string;
   private readonly fromNumber: string;
+  private readonly interactiveMenuContentSid: string;
+  private readonly templates = getWhatsAppTemplates();
   private readonly isConfigured: boolean;
 
   constructor(
@@ -25,7 +28,10 @@ export class WhatsAppService {
     this.authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN') || '';
     this.fromNumber =
       this.configService.get<string>('TWILIO_WHATSAPP_FROM') ||
+      this.configService.get<string>('TWILIO_WHATSAPP_NUMBER') ||
       'whatsapp:+14155238886';
+    this.interactiveMenuContentSid =
+      this.configService.get<string>('TWILIO_WHATSAPP_MENU_CONTENT_SID') || '';
     this.isConfigured = !!(this.accountSid && this.authToken);
 
     this.logger.log(
@@ -38,6 +44,10 @@ export class WhatsAppService {
   async sendMessage(
     to: string,
     body: string,
+    options?: {
+      contentSid?: string;
+      contentVariables?: Record<string, string>;
+    },
   ): Promise<{ sid: string; status: string }> {
     if (!this.isConfigured) {
       this.logger.warn(
@@ -55,7 +65,17 @@ export class WhatsAppService {
       const params = new URLSearchParams();
       params.append('To', toWhatsApp);
       params.append('From', this.fromNumber);
-      params.append('Body', body);
+      if (options?.contentSid) {
+        params.append('ContentSid', options.contentSid);
+        if (options.contentVariables) {
+          params.append(
+            'ContentVariables',
+            JSON.stringify(options.contentVariables),
+          );
+        }
+      } else {
+        params.append('Body', body);
+      }
 
       const response = await axios.post<TwilioMessageResponse>(
         twilioUrl,
@@ -119,6 +139,9 @@ export class WhatsAppService {
         input === 'menu' ||
         input === 'start'
       ) {
+        if (this.interactiveMenuContentSid) {
+          await this.sendInteractiveMenu(phone, user.firstName || 'there');
+        }
         return this.mainMenu(user.firstName || 'there');
       }
 
@@ -247,6 +270,49 @@ export class WhatsAppService {
       '',
       '_Reply with a number or keyword._',
     ]);
+  }
+
+  async sendInteractiveMenu(phone: string, name: string) {
+    if (!this.interactiveMenuContentSid) {
+      return this.sendMessage(phone, this.mainMenu(name));
+    }
+    // Requires a pre-approved Twilio Content Template with quick replies.
+    // Example variables depend on your template definition.
+    return this.sendMessage(phone, '', {
+      contentSid: this.interactiveMenuContentSid,
+      contentVariables: {
+        name,
+      },
+    });
+  }
+
+  async sendTemplateNotification(
+    to: string,
+    template:
+      | 'pickup_scheduled'
+      | 'collector_assigned'
+      | 'collector_en_route'
+      | 'pickup_completed',
+    fallbackText: string,
+    variables?: Record<string, string>,
+  ) {
+    const sid =
+      template === 'pickup_scheduled'
+        ? this.templates.pickupScheduledSid
+        : template === 'collector_assigned'
+          ? this.templates.collectorAssignedSid
+          : template === 'collector_en_route'
+            ? this.templates.collectorEnRouteSid
+            : this.templates.pickupCompletedSid;
+
+    if (!sid) {
+      return this.sendMessage(to, fallbackText);
+    }
+
+    return this.sendMessage(to, '', {
+      contentSid: sid,
+      contentVariables: variables,
+    });
   }
 
   private async getPickupStatus(userId: string): Promise<string> {

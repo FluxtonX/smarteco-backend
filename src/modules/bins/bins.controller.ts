@@ -109,7 +109,7 @@ export class BinsController {
   @ApiOperation({
     summary: 'Update bin fill level (IoT simulation)',
     description:
-      'Simulate an IoT sensor update for fill level. Triggers alert at ≥80% and auto-schedules pickup at ≥95%.',
+      'IoT endpoint for bin fill updates (also usable for simulation). Expected payload: fillLevel (0-100). Triggers alerts at >=80% and auto-schedules pickup at >=95%.',
   })
   @ApiParam({ name: 'id', description: 'Bin UUID' })
   @ApiResponse({

@@ -4,8 +4,10 @@ import {
   IsOptional,
   Length,
   Matches,
+  IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 export class VerifyOtpDto {
   @ApiProperty({
@@ -46,4 +48,14 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsString()
   fcmToken?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When registering a brand new account, indicates whether the user is signing up as USER or COLLECTOR. Used to control initial provisioning (e.g. default bins).',
+    enum: UserRole,
+    example: UserRole.USER,
+  })
+  @IsOptional()
+  @IsEnum(UserRole)
+  signupRole?: UserRole;
 }

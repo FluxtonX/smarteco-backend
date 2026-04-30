@@ -3,7 +3,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateFillLevelDto {
   @ApiProperty({
-    description: 'Fill level percentage (0-100)',
+    description:
+      'Fill level percentage from sensor reading, normalized to 0-100.',
     example: 85,
     minimum: 0,
     maximum: 100,

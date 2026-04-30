@@ -103,7 +103,8 @@ export class PaymentsService {
           dto.phone,
           transactionRef,
         );
-        externalRef = result.referenceId;
+        // Airtel status checks expect the provider transaction id when available.
+        externalRef = result.transactionId || result.referenceId;
       }
 
       // Update payment with provider reference
@@ -301,7 +302,11 @@ export class PaymentsService {
     } else if (provider === 'airtel') {
       // Airtel callback
       transactionRef = body.transaction?.id;
-      status = body.transaction?.status_code === 'TS' ? 'SUCCESSFUL' : 'FAILED';
+      const airtelStatus =
+        body.transaction?.status_code ||
+        (body.transaction as { status?: string } | undefined)?.status ||
+        '';
+      status = airtelStatus === 'TS' ? 'SUCCESSFUL' : 'FAILED';
       reason = body.transaction?.message;
     } else {
       this.logger.warn(`Unknown payment provider: ${provider}`);

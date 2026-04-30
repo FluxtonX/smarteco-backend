@@ -19,6 +19,8 @@ import { UssdModule } from './integrations/ussd/ussd.module';
 import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
 import { TwilioModule } from './integrations/twilio/twilio.module';
 import { FirebaseModule } from './integrations/firebase/firebase.module';
+import { WebSocketModule } from './websocket/websocket.module';
+import { RedisModule } from './infrastructure/redis/redis.module';
 
 @Module({
   imports: [
@@ -36,6 +38,7 @@ import { FirebaseModule } from './integrations/firebase/firebase.module';
 
     // ─── Database ──────────────────────────────────
     DatabaseModule,
+    RedisModule,
 
     // ─── Feature Modules ───────────────────────────
     AuthModule,
@@ -53,6 +56,9 @@ import { FirebaseModule } from './integrations/firebase/firebase.module';
     UssdModule,
     WhatsAppModule,
     FirebaseModule,
+
+    // ─── WebSocket ──────────────────────────────────
+    WebSocketModule,
   ],
   controllers: [HealthController],
 })

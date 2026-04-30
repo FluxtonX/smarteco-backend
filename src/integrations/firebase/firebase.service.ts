@@ -58,4 +58,29 @@ export class FirebaseService implements OnModuleInit {
     }
     return admin.auth().verifyIdToken(idToken);
   }
+
+  async sendPushNotification(
+    token: string,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<boolean> {
+    if (!this.firebaseApp) {
+      this.logger.warn('Firebase not initialized. Push notification skipped.');
+      return false;
+    }
+
+    try {
+      await admin.messaging().send({
+        token,
+        notification: { title, body },
+        data,
+      });
+      this.logger.log(`Push notification sent successfully to ${token.substring(0, 10)}...`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to send push notification: ${(error as Error).message}`);
+      return false;
+    }
+  }
 }

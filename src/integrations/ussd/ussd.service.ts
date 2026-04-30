@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { PickupStatus, WasteType, TimeSlot } from '@prisma/client';
+import { RedisService } from '../../infrastructure/redis/redis.service';
 
 // USSD session state
 interface UssdSession {
@@ -12,11 +13,11 @@ interface UssdSession {
 @Injectable()
 export class UssdService {
   private readonly logger = new Logger(UssdService.name);
-  private sessions = new Map<string, UssdSession>();
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
   ) {
     this.logger.log('USSD service initialized');
   }
@@ -30,6 +31,12 @@ export class UssdService {
     phone: string,
     text: string,
   ): Promise<string> {
+    const sessionKey = `ussd:session:${sessionId}`;
+    await this.redis.set(
+      sessionKey,
+      { phone, lastText: text, lastSeenAt: new Date().toISOString() },
+      300,
+    );
     // Parse input — Africa's Talking sends cumulative text separated by *
     const inputs = text ? text.split('*') : [];
     const level = inputs.length;
@@ -173,6 +180,14 @@ export class UssdService {
         select: { address: true, latitude: true, longitude: true },
       });
 
+      const idempotencyKey = `ussd:idemp:${phone}:${inputs.join('*')}`;
+      const alreadyProcessed = await this.redis.get<{ done: boolean }>(
+        idempotencyKey,
+      );
+      if (alreadyProcessed?.done) {
+        return 'END Your pickup request was already received. Please check status in a moment.';
+      }
+
       await this.prisma.pickup.create({
         data: {
           reference,
@@ -187,6 +202,7 @@ export class UssdService {
           notes: 'Scheduled via USSD',
         },
       });
+      await this.redis.set(idempotencyKey, { done: true }, 120);
 
       return `END Pickup scheduled!\nRef: ${reference}\nType: ${wasteLabels[wasteIdx]}\nTime: Tomorrow ${timeLabels[timeIdx]}\n\nOpen SmartEco app for details.`;
     }

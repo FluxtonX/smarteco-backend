@@ -2,12 +2,63 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationQueryDto } from './dto';
 import { NotificationType, Prisma } from '@prisma/client';
+import { FirebaseService } from '../../integrations/firebase/firebase.service';
+import { TwilioService } from '../../integrations/twilio/twilio.service';
+import { WhatsAppService } from '../../integrations/whatsapp/whatsapp.service';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly firebaseService: FirebaseService,
+    private readonly twilioService: TwilioService,
+    private readonly whatsAppService: WhatsAppService,
+  ) {}
+
+  async dispatchLifecycleNotification(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Prisma.InputJsonValue,
+    channels: Array<'IN_APP' | 'PUSH' | 'SMS' | 'WHATSAPP'> = ['IN_APP', 'PUSH'],
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true },
+    });
+
+    const delivery: Record<string, boolean> = {};
+
+    if (channels.includes('IN_APP') || channels.includes('PUSH')) {
+      const notificationType = channels.includes('PUSH')
+        ? NotificationType.PUSH
+        : NotificationType.IN_APP;
+      await this.createNotification(userId, title, body, notificationType, data);
+      delivery.IN_APP = true;
+      delivery.PUSH = channels.includes('PUSH');
+    }
+
+    if (channels.includes('SMS') && user?.phone) {
+      const smsResult = await this.twilioService.sendSms(user.phone, `${title}: ${body}`);
+      delivery.SMS = smsResult.success;
+    }
+
+    if (channels.includes('WHATSAPP') && user?.phone) {
+      try {
+        await this.whatsAppService.sendMessage(user.phone, `${title}\n${body}`);
+        delivery.WHATSAPP = true;
+      } catch {
+        delivery.WHATSAPP = false;
+      }
+    }
+
+    this.logger.log(
+      `Lifecycle delivery for ${userId}: ${JSON.stringify(delivery)}`,
+    );
+    return delivery;
+  }
 
   // ─── GET NOTIFICATIONS ──────────────────────────
 
@@ -115,8 +166,30 @@ export class NotificationsService {
 
     this.logger.log(`Notification created for user ${userId}: ${title}`);
 
-    // TODO: Send push notification via FCM
-    // TODO: Send SMS via Africa's Talking if type === SMS
+    // Fetch user to get FCM token
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { fcmToken: true },
+    });
+
+    if (user?.fcmToken) {
+      const payloadData =
+        data && typeof data === 'object' && !Array.isArray(data)
+          ? Object.fromEntries(
+              Object.entries(data as Record<string, unknown>).map(([k, v]) => [
+                k,
+                v == null ? '' : String(v),
+              ]),
+            )
+          : undefined;
+
+      await this.firebaseService.sendPushNotification(
+        user.fcmToken,
+        title,
+        body,
+        payloadData,
+      );
+    }
 
     return notification;
   }

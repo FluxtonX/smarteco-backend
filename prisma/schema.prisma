@@ -227,19 +227,23 @@ model Notification {
 }
 
 model CollectorProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id])
+  collectorName String?
   vehiclePlate String
   zone         String
   latitude     Float?
   longitude    Float?
   photoUrl     String?
-  rating       Float    @default(5.0)
-  totalPickups Int      @default(0)
-  isAvailable  Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  rating       Float     @default(0.0)
+  totalPickups Int       @default(0)
+  isAvailable  Boolean   @default(true)
+  isApproved   Boolean   @default(false)
+  approvedAt   DateTime?
+  approvedBy   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   
-  pickups      Pickup[] @relation("CollectorPickups")
+  pickups      Pickup[]  @relation("CollectorPickups")
 }

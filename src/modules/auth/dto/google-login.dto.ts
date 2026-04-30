@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsEmail, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
+import { UserRole } from '@prisma/client';
 
 export class GoogleLoginDto {
   @ApiProperty({
@@ -40,4 +41,15 @@ export class GoogleLoginDto {
   @IsOptional()
   @IsString()
   fcmToken?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: UserRole,
+    example: UserRole.USER,
+    description:
+      'When creating a brand new account via Google, indicates USER vs COLLECTOR intent (used to control initial provisioning).',
+  })
+  @IsOptional()
+  @IsEnum(UserRole)
+  signupRole?: UserRole;
 }

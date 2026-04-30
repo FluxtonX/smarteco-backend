@@ -5,19 +5,31 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto } from './dto';
+import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, AssignCollectorDto, ApproveCollectorDto } from './dto';
 import { PaginationDto } from '../../common/dto';
-import { UserRole, Prisma } from '@prisma/client';
+import { UserRole, Prisma, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { TwilioService } from '../../integrations/twilio/twilio.service';
+import { RedisService } from '../../infrastructure/redis/redis.service';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+    private readonly twilioService: TwilioService,
+    private readonly redis: RedisService,
+  ) {}
 
   // ─── DASHBOARD ──────────────────────────────────
 
   async getDashboard() {
+    const cacheKey = 'cache:admin:dashboard';
+    const cached = await this.redis.get<{ success: true; data: any }>(cacheKey);
+    if (cached) return cached;
+
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
@@ -113,7 +125,7 @@ export class AdminService {
       }),
     ]);
 
-    return {
+    const response = {
       success: true,
       data: {
         users: {
@@ -143,6 +155,8 @@ export class AdminService {
         },
       },
     };
+    await this.redis.set(cacheKey, response, 120);
+    return response;
   }
 
   // ─── LIST USERS ─────────────────────────────────
@@ -234,6 +248,7 @@ export class AdminService {
     });
 
     this.logger.log(`Admin updated user ${userId}: ${JSON.stringify(dto)}`);
+    await this.redis.del('cache:admin:dashboard');
 
     return {
       success: true,
@@ -309,6 +324,81 @@ export class AdminService {
     };
   }
 
+  // ─── ASSIGN COLLECTOR ───────────────────────────
+
+  async assignCollector(pickupId: string, dto: AssignCollectorDto) {
+    const pickup = await this.prisma.pickup.findUnique({
+      where: { id: pickupId },
+      include: {
+        user: {
+          select: { phone: true },
+        },
+      },
+    });
+
+    if (!pickup) {
+      throw new NotFoundException('Pickup not found');
+    }
+
+    const collector = await this.prisma.collectorProfile.findUnique({
+      where: { id: dto.collectorId },
+      include: {
+        user: {
+          select: { phone: true, firstName: true, lastName: true },
+        },
+      },
+    });
+
+    if (!collector) {
+      throw new NotFoundException('Collector not found');
+    }
+
+    const updatedPickup = await this.prisma.pickup.update({
+      where: { id: pickupId },
+      data: {
+        collectorId: dto.collectorId,
+        status: 'COLLECTOR_ASSIGNED',
+      },
+    });
+
+    this.logger.log(
+      `Admin assigned collector ${dto.collectorId} to pickup ${pickupId}`,
+    );
+
+    // Notify collector + user (push + in-app)
+    await Promise.all([
+      this.notificationsService.createNotification(
+        collector.userId,
+        'New Pickup Assigned',
+        `A new pickup has been assigned to you.`,
+        NotificationType.PUSH,
+        { pickupId },
+      ),
+      this.notificationsService.createNotification(
+        pickup.userId,
+        'Collector Assigned',
+        `A collector has been assigned to your pickup.`,
+        NotificationType.PUSH,
+        { pickupId },
+      ),
+      this.twilioService.sendSms(
+        collector.user.phone,
+        `SmartEco: New pickup assigned (${pickup.reference}). Please check collector app for details.`,
+      ),
+      this.twilioService.sendSms(
+        pickup.user.phone,
+        `SmartEco: Collector assigned for pickup ${pickup.reference}.`,
+      ),
+    ]);
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: 'Collector assigned successfully',
+      data: updatedPickup,
+    };
+  }
+
   // ─── LIST COLLECTORS ────────────────────────────
 
   async getCollectors() {
@@ -339,6 +429,8 @@ export class AdminService {
         rating: c.rating,
         totalPickups: c.totalPickups,
         isAvailable: c.isAvailable,
+        isApproved: c.isApproved,
+        approvedAt: c.approvedAt,
         isActive: c.user.isActive,
       })),
     };
@@ -375,13 +467,16 @@ export class AdminService {
       data: { role: UserRole.COLLECTOR },
     });
 
-    // Create collector profile
+    // Create collector profile (admin-created = auto-approved)
     const collectorProfile = await this.prisma.collectorProfile.create({
       data: {
         userId: user.id,
         vehiclePlate: dto.vehiclePlate,
         zone: dto.zone,
         photoUrl: dto.photoUrl,
+        rating: 0.0,
+        isApproved: true,
+        approvedAt: new Date(),
       },
     });
 
@@ -488,5 +583,114 @@ export class AdminService {
         })),
       },
     };
+  }
+
+  // ─── GET PENDING COLLECTORS ─────────────────────
+
+  async getPendingCollectors() {
+    const collectors = await this.prisma.collectorProfile.findMany({
+      where: { isApproved: false },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            avatarUrl: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: collectors.map((c) => ({
+        id: c.id,
+        userId: c.userId,
+        name: `${c.user.firstName || ''} ${c.user.lastName || ''}`.trim(),
+        phone: c.user.phone,
+        email: c.user.email,
+        avatarUrl: c.user.avatarUrl,
+        vehiclePlate: c.vehiclePlate,
+        zone: c.zone,
+        photoUrl: c.photoUrl,
+        createdAt: c.createdAt,
+        userCreatedAt: c.user.createdAt,
+      })),
+    };
+  }
+
+  // ─── APPROVE / REJECT COLLECTOR ─────────────────
+
+  async approveCollector(
+    collectorProfileId: string,
+    adminUserId: string,
+    dto: ApproveCollectorDto,
+  ) {
+    const collector = await this.prisma.collectorProfile.findUnique({
+      where: { id: collectorProfileId },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, phone: true },
+        },
+      },
+    });
+
+    if (!collector) {
+      throw new NotFoundException('Collector profile not found.');
+    }
+
+    if (dto.approved) {
+      // Approve: set isApproved, update user role to COLLECTOR
+      await this.prisma.$transaction([
+        this.prisma.collectorProfile.update({
+          where: { id: collectorProfileId },
+          data: {
+            isApproved: true,
+            approvedAt: new Date(),
+            approvedBy: adminUserId,
+          },
+        }),
+        this.prisma.user.update({
+          where: { id: collector.userId },
+          data: { role: UserRole.COLLECTOR },
+        }),
+      ]);
+
+      this.logger.log(
+        `Admin ${adminUserId} approved collector ${collector.user.phone} (${collectorProfileId})`,
+      );
+
+      return {
+        success: true,
+        message: `Collector ${collector.user.firstName || collector.user.phone} approved successfully`,
+        data: { id: collectorProfileId, isApproved: true },
+      };
+    } else {
+      // Reject: remove the collector profile, keep user as USER
+      await this.prisma.$transaction([
+        this.prisma.collectorProfile.delete({
+          where: { id: collectorProfileId },
+        }),
+        this.prisma.user.update({
+          where: { id: collector.userId },
+          data: { role: UserRole.USER },
+        }),
+      ]);
+
+      this.logger.log(
+        `Admin ${adminUserId} rejected collector ${collector.user.phone}. Reason: ${dto.reason || 'No reason provided'}`,
+      );
+
+      return {
+        success: true,
+        message: `Collector application rejected${dto.reason ? ': ' + dto.reason : ''}`,
+        data: { id: collectorProfileId, isApproved: false },
+      };
+    }
   }
 }
