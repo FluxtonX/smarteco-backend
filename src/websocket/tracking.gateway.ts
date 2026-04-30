@@ -125,6 +125,45 @@ export class TrackingGateway
   ) {
     if (!data?.pickupId) return;
 
+    const userId = client.data.userId as string | undefined;
+    const role = client.data.role as string | undefined;
+    if (!userId || !role) {
+      client.emit('error', { message: 'Unauthorized' });
+      return;
+    }
+
+    // Authorization: only pickup owner, assigned collector, or admin can join.
+    const pickup = await this.prisma.pickup.findUnique({
+      where: { id: data.pickupId },
+      select: {
+        id: true,
+        userId: true,
+        collectorId: true,
+        collector: {
+          select: {
+            id: true,
+            userId: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
+      },
+    });
+
+    if (!pickup) {
+      client.emit('error', { message: 'Pickup not found' });
+      return;
+    }
+
+    const isOwner = pickup.userId === userId;
+    const isAssignedCollector = pickup.collector?.userId === userId;
+    const isAdmin = role === 'ADMIN';
+
+    if (!isAdmin && !isOwner && !isAssignedCollector) {
+      client.emit('error', { message: 'Not allowed to track this pickup' });
+      return;
+    }
+
     const roomName = `pickup:${data.pickupId}`;
     await client.join(roomName);
 
@@ -136,6 +175,19 @@ export class TrackingGateway
       pickupId: data.pickupId,
       message: 'Successfully joined pickup tracking room',
     });
+
+    // Send last known collector location immediately (if available)
+    if (pickup.collector?.latitude != null && pickup.collector?.longitude != null) {
+      client.emit('collector:location:broadcast', {
+        collectorId: pickup.collector.id,
+        latitude: pickup.collector.latitude,
+        longitude: pickup.collector.longitude,
+        heading: 0,
+        speed: 0,
+        eta: null,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   @SubscribeMessage('leave:pickup')

@@ -7,16 +7,24 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateProfileDto, UpdateFcmTokenDto } from './dto';
 import { TIER_THRESHOLDS } from '../../common/constants';
+import { RedisService } from '../../infrastructure/redis/redis.service';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   // ─── GET PROFILE ─────────────────────────────────
 
   async getProfile(userId: string) {
+    const cacheKey = `cache:user:profile:${userId}`;
+    const cached = await this.redis.get<{ success: true; data: any }>(cacheKey);
+    if (cached) return cached;
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -31,6 +39,13 @@ export class UsersService {
         avatarUrl: true,
         isActive: true,
         createdAt: true,
+        collectorProfile: {
+          select: {
+            id: true,
+            isApproved: true,
+            collectorName: true,
+          },
+        },
       },
     });
 
@@ -48,7 +63,7 @@ export class UsersService {
       where: { userId, status: 'COMPLETED' },
     });
 
-    return {
+    const response = {
       success: true,
       data: {
         ...user,
@@ -59,6 +74,8 @@ export class UsersService {
         memberSince: user.createdAt,
       },
     };
+    await this.redis.set(cacheKey, response, 60);
+    return response;
   }
 
   // ─── UPDATE PROFILE ──────────────────────────────
@@ -96,6 +113,7 @@ export class UsersService {
       },
     });
 
+    await this.redis.del(`cache:user:profile:${userId}`);
     return {
       success: true,
       message: 'Profile updated successfully',
@@ -164,6 +182,7 @@ export class UsersService {
       where: { id: userId },
       data: { fcmToken: dto.fcmToken },
     });
+    await this.redis.del(`cache:user:profile:${userId}`);
 
     return {
       success: true,

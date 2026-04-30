@@ -20,6 +20,7 @@ import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
 import { TwilioModule } from './integrations/twilio/twilio.module';
 import { FirebaseModule } from './integrations/firebase/firebase.module';
 import { WebSocketModule } from './websocket/websocket.module';
+import { RedisModule } from './infrastructure/redis/redis.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { WebSocketModule } from './websocket/websocket.module';
 
     // ─── Database ──────────────────────────────────
     DatabaseModule,
+    RedisModule,
 
     // ─── Feature Modules ───────────────────────────
     AuthModule,

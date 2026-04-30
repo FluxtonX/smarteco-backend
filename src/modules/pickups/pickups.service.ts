@@ -22,11 +22,11 @@ import {
   PaymentMethod,
   PaymentStatus,
   Prisma,
-  UserRole,
 } from '@prisma/client';
 import { MomoService } from '../../integrations/momo/momo.service';
 import { AirtelService } from '../../integrations/airtel/airtel.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TwilioService } from '../../integrations/twilio/twilio.service';
 
 type CollectorWithUser = Prisma.CollectorProfileGetPayload<{
   include: {
@@ -55,6 +55,7 @@ export class PickupsService {
     private readonly momoService: MomoService,
     private readonly airtelService: AirtelService,
     private readonly notificationsService: NotificationsService,
+    private readonly twilioService: TwilioService,
   ) {}
 
   // ─── CREATE PICKUP ──────────────────────────────
@@ -90,78 +91,9 @@ export class PickupsService {
     // Estimate points for the pickup
     const estimatedPoints = this.estimatePoints(dto.wasteType);
 
-    // Ensure at least some collectors exist (for simulation)
-    let collectors = await this.prisma.collectorProfile.findMany({
-      where: { isAvailable: true, isApproved: true },
-    });
-
-    if (collectors.length === 0) {
-      this.logger.log(
-        'No collectors found, seeding default collectors for simulation...',
-      );
-      const defaultCollectors = [
-        {
-          phone: '+250788111222',
-          firstName: 'Patrick',
-          lastName: 'Mugisha',
-          plate: 'RAD 123A',
-          rating: 4.8,
-          lat: -1.9441,
-          lon: 30.0619,
-        },
-        {
-          phone: '+250788333444',
-          firstName: 'Jean',
-          lastName: 'Damascene',
-          plate: 'RBA 456C',
-          rating: 4.6,
-          lat: -1.9501,
-          lon: 30.07,
-        },
-      ];
-
-      for (const c of defaultCollectors) {
-        const user = await this.prisma.user.upsert({
-          where: { phone: c.phone },
-          update: { role: 'COLLECTOR' as UserRole },
-          create: {
-            phone: c.phone,
-            firstName: c.firstName,
-            lastName: c.lastName,
-            role: 'COLLECTOR' as UserRole,
-            referralCode: `COLL-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-          },
-        });
-
-        await this.prisma.collectorProfile.upsert({
-          where: { userId: user.id },
-          update: { isAvailable: true, isApproved: true, latitude: c.lat, longitude: c.lon },
-          create: {
-            userId: user.id,
-            vehiclePlate: c.plate,
-            zone: 'Kigali',
-            rating: c.rating,
-            latitude: c.lat,
-            longitude: c.lon,
-            isAvailable: true,
-            isApproved: true,
-            approvedAt: new Date(),
-          },
-        });
-      }
-
-      // Fetch again after seeding
-      collectors = await this.prisma.collectorProfile.findMany({
-        where: { isAvailable: true, isApproved: true },
-      });
-    }
-
-    // Auto-assign: pick the least busy available collector (nearest if possible)
-    const assignedCollector = this.findBestCollector(
-      collectors,
-      dto.latitude,
-      dto.longitude,
-    );
+    // Pickups are assigned to collectors by admins only.
+    // Keep pickup in PENDING until an admin assigns a collector.
+    const assignedCollector = null;
 
     // Calculate payment amount
     const amount = PICKUP_PRICES[dto.wasteType] || 100;
@@ -233,10 +165,8 @@ export class PickupsService {
         longitude: dto.longitude,
         notes: dto.notes,
         binId: dto.binId,
-        status: assignedCollector
-          ? PickupStatus.COLLECTOR_ASSIGNED
-          : PickupStatus.PENDING,
-        collectorId: assignedCollector?.id || null,
+        status: PickupStatus.PENDING,
+        collectorId: null,
         payment: {
           create: {
             userId,
@@ -269,15 +199,15 @@ export class PickupsService {
       `Pickup created: ${reference} with payment ${paymentRef} for user ${userId}`,
     );
 
-    if (assignedCollector) {
-      await this.notificationsService.createNotification(
-        assignedCollector.userId,
-        'New Pickup Assigned',
-        `A new ${dto.wasteType} waste pickup has been assigned to you at ${dto.address}.`,
-        'IN_APP',
-        { pickupId: pickup.id }
-      );
-    }
+    // Notify user via all channels (Push, SMS, WhatsApp)
+    await this.notificationsService.dispatchLifecycleNotification(
+      userId,
+      'Pickup Scheduled',
+      `SmartEco: Pickup ${reference} scheduled for ${dto.timeSlot}. Status: PENDING.`,
+      { pickupId: pickup.id, reference: pickup.reference },
+      ['IN_APP', 'PUSH', 'SMS', 'WHATSAPP'],
+    );
+
 
     return {
       success: true,
@@ -481,48 +411,6 @@ export class PickupsService {
         data: null,
         message: 'No active pickup found.',
       };
-    }
-
-    // AUTO-ASSIGN LOGIC: If pending and no collector, assign one now
-    if (pickup.status === PickupStatus.PENDING && !pickup.collectorId) {
-      this.logger.log(`Auto-assigning collector for pickup ${pickup.id}`);
-      const collectors = await this.prisma.collectorProfile.findMany({
-        where: { isAvailable: true, isApproved: true },
-      });
-
-      if (collectors.length > 0) {
-        const randomCollector =
-          collectors[Math.floor(Math.random() * collectors.length)];
-        pickup = await this.prisma.pickup.update({
-          where: { id: pickup.id },
-          data: {
-            status: PickupStatus.COLLECTOR_ASSIGNED,
-            collectorId: randomCollector.id,
-          },
-          include: {
-            collector: {
-              include: {
-                user: {
-                  select: {
-                    firstName: true,
-                    lastName: true,
-                    phone: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        // Notify collector
-        await this.notificationsService.createNotification(
-          randomCollector.userId,
-          'New Pickup Assigned',
-          `A pending pickup has been automatically assigned to you.`,
-          'IN_APP',
-          { pickupId: pickup.id }
-        );
-      }
     }
 
     // Calculate ETA if collector is assigned and has location
@@ -736,9 +624,7 @@ export class PickupsService {
   }
 
   /**
-   * Find the best collector to assign:
-   * 1. Prioritize nearest collector to the pickup location
-   * 2. Among equally close collectors, pick the one with fewest total pickups
+   * Deprecated: collector assignment is handled by admins only.
    */
   private findBestCollector(
     collectors: {

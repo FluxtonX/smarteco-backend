@@ -57,6 +57,27 @@ export class WhatsAppController {
     };
   }
 
+  @Post('send-interactive-menu')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Send interactive WhatsApp menu',
+    description:
+      'Sends quick-reply style interactive menu via Twilio Content Template (falls back to text menu if template is not configured).',
+  })
+  async sendInteractiveMenu(
+    @Body('to') to: string,
+    @Body('name') name?: string,
+  ) {
+    const result = await this.whatsAppService.sendInteractiveMenu(
+      to,
+      name || 'there',
+    );
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
   private escapeXml(text: string): string {
     return text
       .replace(/&/g, '&amp;')

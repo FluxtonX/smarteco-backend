@@ -15,7 +15,9 @@ import {
 } from './dto';
 import { EcoPointsService } from '../eco-points/eco-points.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { PickupStatus, BinStatus, Prisma, NotificationType } from '@prisma/client';
+import { PickupStatus, BinStatus, Prisma, NotificationType, UserRole } from '@prisma/client';
+import { TwilioService } from '../../integrations/twilio/twilio.service';
+import { RouteOptimizerService } from './route-optimizer.service';
 
 @Injectable()
 export class CollectorsService {
@@ -25,7 +27,17 @@ export class CollectorsService {
     private readonly prisma: PrismaService,
     private readonly ecoPointsService: EcoPointsService,
     private readonly notificationsService: NotificationsService,
+    private readonly twilioService: TwilioService,
+    private readonly routeOptimizer: RouteOptimizerService,
   ) {}
+
+  private assertApproved(profile: { isApproved: boolean }) {
+    if (!profile.isApproved) {
+      throw new ForbiddenException(
+        'Your collector account is pending admin approval.',
+      );
+    }
+  }
 
   // ─── GET MY PROFILE ────────────────────────────
 
@@ -48,6 +60,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     // Get today's stats
     const today = new Date();
@@ -114,6 +127,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     const now = new Date();
 
@@ -223,6 +237,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -240,7 +255,7 @@ export class CollectorsService {
           notIn: [PickupStatus.CANCELLED, PickupStatus.COMPLETED],
         },
       },
-      orderBy: [{ timeSlot: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ createdAt: 'asc' }],
       include: {
         user: {
           select: {
@@ -259,9 +274,27 @@ export class CollectorsService {
       },
     });
 
+    const orderedPoints = await this.routeOptimizer.optimize(
+      collectorProfile.latitude != null && collectorProfile.longitude != null
+        ? {
+            latitude: collectorProfile.latitude,
+            longitude: collectorProfile.longitude,
+          }
+        : null,
+      pickups.map((p) => ({
+        id: p.id,
+        latitude: p.latitude,
+        longitude: p.longitude,
+      })),
+    );
+    const idToPickup = new Map(pickups.map((p) => [p.id, p]));
+    const orderedPickups = orderedPoints
+      .map((p) => idToPickup.get(p.id))
+      .filter((p): p is (typeof pickups)[number] => !!p);
+
     return {
       success: true,
-      data: pickups.map((p) => ({
+      data: orderedPickups.map((p, idx) => ({
         id: p.id,
         reference: p.reference,
         wasteType: p.wasteType,
@@ -278,6 +311,7 @@ export class CollectorsService {
           phone: p.user.phone,
         },
         bin: p.bin,
+        routeOrder: idx + 1,
       })),
     };
   }
@@ -292,6 +326,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     const pickup = await this.prisma.pickup.findUnique({
       where: { id: pickupId },
@@ -370,6 +405,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     const where: Prisma.PickupWhereInput = {
       collectorId: collectorProfile.id,
@@ -448,6 +484,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     // Get pickup
     const pickup = await this.prisma.pickup.findUnique({
@@ -610,13 +647,15 @@ export class CollectorsService {
       body = `Your pickup of ${dto.weightKg}kg has been completed. Check your EcoPoints!`;
     }
 
-    await this.notificationsService.createNotification(
+    // Notify User via all channels (Push, SMS, WhatsApp)
+    await this.notificationsService.dispatchLifecycleNotification(
       pickup.userId,
       title,
       body,
-      NotificationType.IN_APP,
-      { pickupId, status: dto.status }
+      { pickupId, status: dto.status, reference: pickup.reference },
+      ['IN_APP', 'PUSH', 'SMS', 'WHATSAPP'],
     );
+
 
     return {
       success: true,
@@ -635,6 +674,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     await this.prisma.collectorProfile.update({
       where: { id: collectorProfile.id },
@@ -664,6 +704,7 @@ export class CollectorsService {
     if (!collectorProfile) {
       throw new ForbiddenException('You are not registered as a collector.');
     }
+    this.assertApproved(collectorProfile);
 
     await this.prisma.collectorProfile.update({
       where: { id: collectorProfile.id },
@@ -688,18 +729,27 @@ export class CollectorsService {
       throw new ForbiddenException('You are already registered as a collector.');
     }
 
-    // Do NOT change role here — role stays USER until admin approves
-    // The isApproved field defaults to false in the schema
-
-    const collectorProfile = await this.prisma.collectorProfile.create({
-      data: {
-        userId,
-        vehiclePlate: dto.vehiclePlate,
-        zone: dto.zone,
-        photoUrl: dto.photoUrl,
-        isApproved: false,
-      },
-    });
+    // Mark user as COLLECTOR immediately, but keep access blocked until approved.
+    const [collectorProfile] = await this.prisma.$transaction([
+      this.prisma.collectorProfile.create({
+        data: {
+          userId,
+          collectorName: dto.collectorName,
+          vehiclePlate: dto.vehiclePlate,
+          zone: dto.zone,
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          photoUrl: dto.photoUrl,
+          isApproved: false,
+          rating: 0.0,
+        },
+      }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { role: UserRole.COLLECTOR },
+        select: { id: true },
+      }),
+    ]);
 
     this.logger.log(
       `Collector registration submitted by user ${userId}. Pending admin approval.`,
@@ -711,4 +761,5 @@ export class CollectorsService {
       data: collectorProfile,
     };
   }
+
 }

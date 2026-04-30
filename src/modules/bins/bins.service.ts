@@ -12,13 +12,17 @@ import {
   PICKUP_REFERENCE_PREFIX,
   PICKUP_REFERENCE_LENGTH,
 } from '../../common/constants';
-import { PickupStatus, BinStatus } from '@prisma/client';
+import { PickupStatus, BinStatus, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BinsService {
   private readonly logger = new Logger(BinsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ─── GET ALL BINS ───────────────────────────────
 
@@ -148,6 +152,14 @@ export class BinsService {
       this.logger.log(
         `Auto-scheduled pickup ${reference} for full bin ${bin.qrCode}`,
       );
+
+      await this.notificationsService.createNotification(
+        userId,
+        'Bin Full - Pickup Scheduled',
+        `Your ${bin.wasteType} bin (${bin.qrCode}) is full. Pickup ${reference} has been scheduled automatically.`,
+        NotificationType.PUSH,
+        { binId: bin.id, qrCode: bin.qrCode, pickupReference: reference },
+      );
     }
 
     return {
@@ -199,16 +211,28 @@ export class BinsService {
     let autoScheduled = false;
 
     // Trigger alert at threshold
-    if (
+    const crossedAlertThreshold =
+      bin.fillLevel < BIN_ALERT_THRESHOLD &&
       dto.fillLevel >= BIN_ALERT_THRESHOLD &&
-      dto.fillLevel < BIN_AUTO_SCHEDULE_THRESHOLD
-    ) {
+      dto.fillLevel < BIN_AUTO_SCHEDULE_THRESHOLD;
+    if (crossedAlertThreshold) {
       alertTriggered = true;
       this.logger.log(`Alert: Bin ${bin.qrCode} is ${dto.fillLevel}% full`);
+
+      await this.notificationsService.createNotification(
+        bin.userId,
+        'Bin Nearly Full',
+        `Your ${bin.wasteType} bin (${bin.qrCode}) is now ${dto.fillLevel}% full.`,
+        NotificationType.PUSH,
+        { binId: bin.id, qrCode: bin.qrCode, fillLevel: dto.fillLevel },
+      );
     }
 
     // Auto-schedule pickup at high threshold
-    if (dto.fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
+    const crossedAutoThreshold =
+      bin.fillLevel < BIN_AUTO_SCHEDULE_THRESHOLD &&
+      dto.fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD;
+    if (crossedAutoThreshold) {
       alertTriggered = true;
       autoScheduled = true;
 
@@ -252,6 +276,14 @@ export class BinsService {
 
         this.logger.log(
           `Auto-scheduled pickup for bin ${bin.qrCode} at ${dto.fillLevel}% fill`,
+        );
+
+        await this.notificationsService.createNotification(
+          bin.userId,
+          'Auto Pickup Scheduled',
+          `Your ${bin.wasteType} bin (${bin.qrCode}) reached ${dto.fillLevel}%. Pickup ${reference} was scheduled automatically.`,
+          NotificationType.PUSH,
+          { binId: bin.id, qrCode: bin.qrCode, fillLevel: dto.fillLevel, pickupReference: reference },
         );
       }
     }

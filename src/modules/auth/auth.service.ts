@@ -89,7 +89,7 @@ export class AuthService {
   // ─── VERIFY OTP ──────────────────────────────────
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const { phone, otp, referralCode, fcmToken } = dto;
+    const { phone, otp, referralCode, fcmToken, signupRole } = dto;
 
     // Verify OTP via Twilio Verify
     let verification: { valid: boolean; status: string };
@@ -111,6 +111,11 @@ export class AuthService {
     // Find or create user
     let user = await this.prisma.user.findUnique({
       where: { phone },
+      include: {
+        collectorProfile: {
+          select: { id: true, isApproved: true, collectorName: true },
+        },
+      },
     });
 
     let isNewUser = false;
@@ -140,6 +145,11 @@ export class AuthService {
           referredBy: referrerId,
           fcmToken: fcmToken || null,
         },
+        include: {
+          collectorProfile: {
+            select: { id: true, isApproved: true, collectorName: true },
+          },
+        },
       });
 
       // Award registration bonus
@@ -152,8 +162,10 @@ export class AuthService {
         },
       });
 
-      // Create 5 default bins for user
-      await this.createDefaultBins(user.id);
+      // Create default bins only for USER signups (collectors should not have bins by default)
+      if (signupRole !== 'COLLECTOR') {
+        await this.createDefaultBins(user.id);
+      }
 
       this.logger.log(
         `New user registered: ${phone} (referral: ${referralCode || 'none'})`,
@@ -161,9 +173,14 @@ export class AuthService {
     } else {
       // Update FCM token if provided
       if (fcmToken) {
-        await this.prisma.user.update({
+        user = await this.prisma.user.update({
           where: { id: user.id },
           data: { fcmToken },
+          include: {
+            collectorProfile: {
+              select: { id: true, isApproved: true, collectorName: true },
+            },
+          },
         });
       }
     }
@@ -193,6 +210,13 @@ export class AuthService {
           ecoPoints: totalPoints,
           ecoTier,
           isNewUser,
+          collectorProfile: user.collectorProfile
+            ? {
+                id: user.collectorProfile.id,
+                isApproved: user.collectorProfile.isApproved,
+                collectorName: user.collectorProfile.collectorName,
+              }
+            : null,
         },
       },
     };
@@ -274,7 +298,7 @@ export class AuthService {
   }
 
   async googleLogin(dto: GoogleLoginDto) {
-    const { idToken, email, displayName, photoUrl, fcmToken } = dto;
+    const { idToken, email, displayName, photoUrl, fcmToken, signupRole } = dto;
 
     // 1. Verify token with Firebase
     let decodedToken: admin.auth.DecodedIdToken;
@@ -294,6 +318,11 @@ export class AuthService {
     // 2. Find or create user by email
     let user = await this.prisma.user.findUnique({
       where: { email },
+      include: {
+        collectorProfile: {
+          select: { id: true, isApproved: true, collectorName: true },
+        },
+      },
     });
 
     let isNewUser = false;
@@ -319,6 +348,11 @@ export class AuthService {
           referralCode: newReferralCode,
           fcmToken: fcmToken || null,
         },
+        include: {
+          collectorProfile: {
+            select: { id: true, isApproved: true, collectorName: true },
+          },
+        },
       });
 
       // Award registration bonus
@@ -331,8 +365,10 @@ export class AuthService {
         },
       });
 
-      // Create default bins
-      await this.createDefaultBins(user.id);
+      // Create default bins only for USER signups (collectors should not have bins by default)
+      if (signupRole !== 'COLLECTOR') {
+        await this.createDefaultBins(user.id);
+      }
 
       this.logger.log(`New user registered via Google: ${email}`);
     } else {
@@ -340,6 +376,11 @@ export class AuthService {
       const updateData: Prisma.UserUpdateInput = {};
       if (!user.firstName && displayName)
         updateData.firstName = displayName.split(' ')[0];
+      if (!user.lastName && displayName) {
+        const [, ...lastNameParts] = displayName.split(' ');
+        const last = lastNameParts.join(' ').trim();
+        if (last.length > 0) updateData.lastName = last;
+      }
       if (!user.avatarUrl && photoUrl) updateData.avatarUrl = photoUrl;
       if (fcmToken) updateData.fcmToken = fcmToken;
 
@@ -347,6 +388,11 @@ export class AuthService {
         user = await this.prisma.user.update({
           where: { id: user.id },
           data: updateData,
+          include: {
+            collectorProfile: {
+              select: { id: true, isApproved: true, collectorName: true },
+            },
+          },
         });
       }
     }
@@ -380,6 +426,13 @@ export class AuthService {
           ecoPoints: totalPoints,
           ecoTier,
           isNewUser,
+          collectorProfile: user.collectorProfile
+            ? {
+                id: user.collectorProfile.id,
+                isApproved: user.collectorProfile.isApproved,
+                collectorName: user.collectorProfile.collectorName,
+              }
+            : null,
         },
       },
     };

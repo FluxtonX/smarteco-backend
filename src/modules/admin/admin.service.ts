@@ -7,17 +7,29 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, AssignCollectorDto, ApproveCollectorDto } from './dto';
 import { PaginationDto } from '../../common/dto';
-import { UserRole, Prisma } from '@prisma/client';
+import { UserRole, Prisma, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { TwilioService } from '../../integrations/twilio/twilio.service';
+import { RedisService } from '../../infrastructure/redis/redis.service';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+    private readonly twilioService: TwilioService,
+    private readonly redis: RedisService,
+  ) {}
 
   // ─── DASHBOARD ──────────────────────────────────
 
   async getDashboard() {
+    const cacheKey = 'cache:admin:dashboard';
+    const cached = await this.redis.get<{ success: true; data: any }>(cacheKey);
+    if (cached) return cached;
+
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
@@ -113,7 +125,7 @@ export class AdminService {
       }),
     ]);
 
-    return {
+    const response = {
       success: true,
       data: {
         users: {
@@ -143,6 +155,8 @@ export class AdminService {
         },
       },
     };
+    await this.redis.set(cacheKey, response, 120);
+    return response;
   }
 
   // ─── LIST USERS ─────────────────────────────────
@@ -234,6 +248,7 @@ export class AdminService {
     });
 
     this.logger.log(`Admin updated user ${userId}: ${JSON.stringify(dto)}`);
+    await this.redis.del('cache:admin:dashboard');
 
     return {
       success: true,
@@ -314,6 +329,11 @@ export class AdminService {
   async assignCollector(pickupId: string, dto: AssignCollectorDto) {
     const pickup = await this.prisma.pickup.findUnique({
       where: { id: pickupId },
+      include: {
+        user: {
+          select: { phone: true },
+        },
+      },
     });
 
     if (!pickup) {
@@ -322,6 +342,11 @@ export class AdminService {
 
     const collector = await this.prisma.collectorProfile.findUnique({
       where: { id: dto.collectorId },
+      include: {
+        user: {
+          select: { phone: true, firstName: true, lastName: true },
+        },
+      },
     });
 
     if (!collector) {
@@ -339,6 +364,33 @@ export class AdminService {
     this.logger.log(
       `Admin assigned collector ${dto.collectorId} to pickup ${pickupId}`,
     );
+
+    // Notify collector + user (push + in-app)
+    await Promise.all([
+      this.notificationsService.createNotification(
+        collector.userId,
+        'New Pickup Assigned',
+        `A new pickup has been assigned to you.`,
+        NotificationType.PUSH,
+        { pickupId },
+      ),
+      this.notificationsService.createNotification(
+        pickup.userId,
+        'Collector Assigned',
+        `A collector has been assigned to your pickup.`,
+        NotificationType.PUSH,
+        { pickupId },
+      ),
+      this.twilioService.sendSms(
+        collector.user.phone,
+        `SmartEco: New pickup assigned (${pickup.reference}). Please check collector app for details.`,
+      ),
+      this.twilioService.sendSms(
+        pickup.user.phone,
+        `SmartEco: Collector assigned for pickup ${pickup.reference}.`,
+      ),
+    ]);
+    await this.redis.del('cache:admin:dashboard');
 
     return {
       success: true,
@@ -422,6 +474,7 @@ export class AdminService {
         vehiclePlate: dto.vehiclePlate,
         zone: dto.zone,
         photoUrl: dto.photoUrl,
+        rating: 0.0,
         isApproved: true,
         approvedAt: new Date(),
       },
@@ -619,9 +672,15 @@ export class AdminService {
       };
     } else {
       // Reject: remove the collector profile, keep user as USER
-      await this.prisma.collectorProfile.delete({
-        where: { id: collectorProfileId },
-      });
+      await this.prisma.$transaction([
+        this.prisma.collectorProfile.delete({
+          where: { id: collectorProfileId },
+        }),
+        this.prisma.user.update({
+          where: { id: collector.userId },
+          data: { role: UserRole.USER },
+        }),
+      ]);
 
       this.logger.log(
         `Admin ${adminUserId} rejected collector ${collector.user.phone}. Reason: ${dto.reason || 'No reason provided'}`,

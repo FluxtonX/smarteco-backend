@@ -148,7 +148,7 @@ model CollectorProfile {
   vehiclePlate String   @map("vehicle_plate")
   zone         String
   photoUrl     String?  @map("photo_url")
-  rating       Float    @default(5.0)
+  rating       Float    @default(0.0)
   totalPickups Int      @default(0) @map("total_pickups")
   isAvailable  Boolean  @default(true) @map("is_available")
   latitude     Float?

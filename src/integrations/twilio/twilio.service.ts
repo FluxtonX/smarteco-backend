@@ -7,6 +7,7 @@ export class TwilioService {
   private readonly logger = new Logger(TwilioService.name);
   private readonly client: Twilio.Twilio;
   private readonly verifyServiceSid: string;
+  private readonly smsFromNumber: string;
 
   constructor(private readonly configService: ConfigService) {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
@@ -14,6 +15,8 @@ export class TwilioService {
     this.verifyServiceSid = this.configService.get<string>(
       'TWILIO_VERIFY_SERVICE_SID',
     )!;
+    this.smsFromNumber =
+      this.configService.get<string>('TWILIO_SMS_FROM') || '';
 
     if (!accountSid || !authToken || !this.verifyServiceSid) {
       this.logger.error(
@@ -82,6 +85,36 @@ export class TwilioService {
         `Failed to check verification for ${phone}: ${(error as Error).message}`,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Send normal SMS notifications (non-OTP).
+   */
+  async sendSms(
+    to: string,
+    body: string,
+  ): Promise<{ success: boolean; sid?: string }> {
+    if (!this.smsFromNumber) {
+      this.logger.warn(
+        `TWILIO_SMS_FROM not configured — mock SMS to ${to}: "${body.substring(0, 80)}..."`,
+      );
+      return { success: true };
+    }
+
+    try {
+      const message = await this.client.messages.create({
+        to,
+        from: this.smsFromNumber,
+        body,
+      });
+      this.logger.log(`SMS sent to ${to}: ${message.sid}`);
+      return { success: true, sid: message.sid };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send SMS to ${to}: ${(error as Error).message}`,
+      );
+      return { success: false };
     }
   }
 }

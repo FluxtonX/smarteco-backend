@@ -230,12 +230,13 @@ model CollectorProfile {
   id           String    @id @default(uuid())
   userId       String    @unique
   user         User      @relation(fields: [userId], references: [id])
+  collectorName String?
   vehiclePlate String
   zone         String
   latitude     Float?
   longitude    Float?
   photoUrl     String?
-  rating       Float     @default(5.0)
+  rating       Float     @default(0.0)
   totalPickups Int       @default(0)
   isAvailable  Boolean   @default(true)
   isApproved   Boolean   @default(false)

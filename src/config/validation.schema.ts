@@ -41,6 +41,13 @@ export const validationSchema = Joi.object({
   TWILIO_AUTH_TOKEN: Joi.string().required(),
   TWILIO_VERIFY_SERVICE_SID: Joi.string().required(),
   TWILIO_WHATSAPP_NUMBER: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_FROM: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_MENU_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_PICKUP_SCHEDULED_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_COLLECTOR_ASSIGNED_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_EN_ROUTE_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_PICKUP_COMPLETED_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_SMS_FROM: Joi.string().allow('').optional(),
 
   // Firebase (optional for dev)
   FIREBASE_PROJECT_ID: Joi.string().allow('').optional(),
