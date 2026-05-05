@@ -14,6 +14,7 @@ import {
   VerifyOtpDto,
   RefreshTokenDto,
   GoogleLoginDto,
+  AdminLoginDto,
 } from './dto';
 import { FirebaseService } from '../../integrations/firebase/firebase.service';
 import * as admin from 'firebase-admin';
@@ -217,6 +218,68 @@ export class AuthService {
                 collectorName: user.collectorProfile.collectorName,
               }
             : null,
+        },
+      },
+    };
+  }
+
+  // ─── ADMIN LOGIN (Hardcoded) ─────────────────────
+
+  async adminLogin(dto: AdminLoginDto) {
+    const { email, password } = dto;
+
+    const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
+    const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
+
+    if (email !== adminEmail || password !== adminPassword) {
+      throw new UnauthorizedException('Invalid admin credentials');
+    }
+
+    // Find the admin user in DB or create if doesn't exist
+    let user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      // Auto-create admin user if missing
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          phone: 'ADMIN_PORTAL', // Fixed placeholder for admin
+          role: 'ADMIN',
+          referralCode: this.generateReferralCode(),
+        },
+      });
+    } else if (user.role !== 'ADMIN') {
+      // Ensure the user actually has the ADMIN role
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'ADMIN' },
+      });
+    }
+
+    const tokens = await this.generateTokens(user);
+    const totalPoints = await this.getTotalPoints(user.id);
+    const ecoTier = this.calculateTier(totalPoints);
+
+    return {
+      success: true,
+      message: 'Admin login successful',
+      data: {
+        ...tokens,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          userType: user.userType,
+          role: user.role,
+          referralCode: user.referralCode,
+          avatarUrl: user.avatarUrl,
+          ecoPoints: totalPoints,
+          ecoTier,
+          isNewUser: false,
         },
       },
     };

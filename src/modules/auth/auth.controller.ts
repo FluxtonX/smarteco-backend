@@ -1,24 +1,7 @@
-import {
-  Controller,
-  Post,
-  Body,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import {Controller,Post,Body,UseGuards,HttpCode,HttpStatus,} from '@nestjs/common';
+import {ApiTags,ApiOperation,ApiResponse,ApiBearerAuth,} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import {
-  SendOtpDto,
-  VerifyOtpDto,
-  RefreshTokenDto,
-  GoogleLoginDto,
-} from './dto';
+import {SendOtpDto,VerifyOtpDto,RefreshTokenDto,GoogleLoginDto,} from './dto';
 import { JwtAuthGuard } from './guards';
 import { CurrentUser } from '../../common/decorators';
 
