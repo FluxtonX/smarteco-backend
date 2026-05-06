@@ -90,13 +90,13 @@ model User {
   lastName     String?
   userType     UserType @default(RESIDENTIAL)
   role         UserRole @default(USER)
-  referralCode String   @unique
+  referralCode String?  @unique
   referredBy   String?
   avatarUrl    String?
   fcmToken     String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @default(now()) @updatedAt
 
   // Relations
   pickups          Pickup[]
@@ -158,7 +158,7 @@ model CollectorProfile {
   latitude      Float?
   longitude     Float?
   createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  updatedAt     DateTime  @default(now()) @updatedAt
 
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -185,7 +185,7 @@ model Pickup {
   cancelledAt   DateTime?
   cancelReason  String?
   createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  updatedAt     DateTime     @default(now()) @updatedAt
 
   // Relations
   user      User              @relation(fields: [userId], references: [id])
@@ -213,7 +213,7 @@ model Bin {
   longitude   Float?
   lastEmptied DateTime?
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -256,7 +256,7 @@ model Payment {
   failedAt       DateTime?
   failReason     String?
   createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  updatedAt      DateTime      @default(now()) @updatedAt
 
   // Relations
   pickup Pickup @relation(fields: [pickupId], references: [id])
