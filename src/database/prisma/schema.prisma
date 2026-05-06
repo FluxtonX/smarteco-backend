@@ -109,7 +109,7 @@ model User {
   collectorProfile CollectorProfile?
   refreshTokens    RefreshToken[]
 
-  @@map("User")
+  @@map("users")
 }
 
 model RefreshToken {
@@ -125,7 +125,7 @@ model RefreshToken {
 
   @@index([userId])
   @@index([token])
-  @@map("RefreshToken")
+  @@map("refresh_tokens")
 }
 
 model OtpVerification {
@@ -139,7 +139,7 @@ model OtpVerification {
 
   @@index([phone, otp])
   @@index([phone, createdAt])
-  @@map("OtpVerification")
+  @@map("otp_verifications")
 }
 
 model CollectorProfile {
@@ -164,7 +164,7 @@ model CollectorProfile {
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pickups Pickup[]
 
-  @@map("CollectorProfile")
+  @@map("collector_profiles")
 }
 
 model Pickup {
@@ -199,7 +199,7 @@ model Pickup {
   @@index([status])
   @@index([scheduledDate])
   @@index([reference])
-  @@map("Pickup")
+  @@map("pickups")
 }
 
 model Bin {
@@ -221,7 +221,7 @@ model Bin {
 
   @@index([userId])
   @@index([qrCode])
-  @@map("Bin")
+  @@map("bins")
 }
 
 model EcoPointTransaction {
@@ -239,7 +239,7 @@ model EcoPointTransaction {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
-  @@map("EcoPointTransaction")
+  @@map("eco_point_transactions")
 }
 
 model Payment {
@@ -265,7 +265,7 @@ model Payment {
   @@index([userId])
   @@index([status])
   @@index([transactionRef])
-  @@map("Payment")
+  @@map("payments")
 }
 
 model Notification {
@@ -283,5 +283,5 @@ model Notification {
 
   @@index([userId, isRead])
   @@index([sentAt])
-  @@map("Notification")
+  @@map("notifications")
 }
