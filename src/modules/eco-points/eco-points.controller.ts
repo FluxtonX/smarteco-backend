@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -6,7 +6,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { EcoPointsService } from './eco-points.service';
-import { EcoPointsQueryDto } from './dto';
+import { EcoPointsQueryDto, RedeemDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { CurrentUser } from '../../common/decorators';
 
@@ -104,5 +104,13 @@ export class EcoPointsController {
   })
   async getLeaderboard() {
     return this.ecoPointsService.getLeaderboard();
+  }
+
+  @Post('redeem')
+  @ApiOperation({ summary: 'Redeem EcoPoints for a reward' })
+  @ApiResponse({ status: 201, description: 'Points redeemed successfully' })
+  @ApiResponse({ status: 400, description: 'Insufficient points' })
+  async redeemPoints(@CurrentUser('id') userId: string, @Body() body: RedeemDto) {
+    return this.ecoPointsService.redeemPoints(userId, body);
   }
 }

@@ -1,40 +1,34 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+
+interface CacheEntry {
+  payload: string;
+  expiry: number | null;
+}
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private readonly client: Redis;
+  private store = new Map<string, CacheEntry>();
 
   constructor(private readonly configService: ConfigService) {
-    const host = this.configService.get<string>('REDIS_HOST') || 'localhost';
-    const port = parseInt(
-      this.configService.get<string>('REDIS_PORT') || '6379',
-      10,
-    );
-
-    this.client = new Redis({
-      host,
-      port,
-      lazyConnect: true,
-      maxRetriesPerRequest: 2,
-    });
-
-    this.client.on('error', (err) => {
-      this.logger.warn(`Redis error: ${err.message}`);
-    });
+    this.logger.log('RedisService initialized in MVP IN-MEMORY mode (No external Redis server needed).');
   }
 
   async get<T = unknown>(key: string): Promise<T | null> {
     try {
-      if (!this.client.status || this.client.status === 'end') {
-        await this.client.connect();
+      const entry = this.store.get(key);
+      if (!entry) return null;
+
+      // Check expiry
+      if (entry.expiry && Date.now() > entry.expiry) {
+        this.store.delete(key);
+        return null;
       }
-      const val = await this.client.get(key);
-      return val ? (JSON.parse(val) as T) : null;
+
+      return JSON.parse(entry.payload) as T;
     } catch (e) {
-      this.logger.warn(`Redis get failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(`In-memory get failed for ${key}: ${(e as Error).message}`);
       return null;
     }
   }
@@ -45,55 +39,40 @@ export class RedisService implements OnModuleDestroy {
     ttlSeconds?: number,
   ): Promise<boolean> {
     try {
-      if (!this.client.status || this.client.status === 'end') {
-        await this.client.connect();
-      }
       const payload = JSON.stringify(value);
-      if (ttlSeconds && ttlSeconds > 0) {
-        await this.client.set(key, payload, 'EX', ttlSeconds);
-      } else {
-        await this.client.set(key, payload);
-      }
+      const expiry = ttlSeconds && ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null;
+      
+      this.store.set(key, { payload, expiry });
       return true;
     } catch (e) {
-      this.logger.warn(`Redis set failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(`In-memory set failed for ${key}: ${(e as Error).message}`);
       return false;
     }
   }
 
   async del(key: string): Promise<void> {
     try {
-      if (!this.client.status || this.client.status === 'end') {
-        await this.client.connect();
-      }
-      await this.client.del(key);
+      this.store.delete(key);
     } catch (e) {
-      this.logger.warn(`Redis del failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(`In-memory del failed for ${key}: ${(e as Error).message}`);
     }
   }
 
   async delByPrefix(prefix: string): Promise<void> {
     try {
-      if (!this.client.status || this.client.status === 'end') {
-        await this.client.connect();
-      }
-      const keys = await this.client.keys(`${prefix}*`);
-      if (keys.length > 0) {
-        await this.client.del(...keys);
+      for (const key of this.store.keys()) {
+        if (key.startsWith(prefix)) {
+          this.store.delete(key);
+        }
       }
     } catch (e) {
       this.logger.warn(
-        `Redis delByPrefix failed for ${prefix}: ${(e as Error).message}`,
+        `In-memory delByPrefix failed for ${prefix}: ${(e as Error).message}`,
       );
     }
   }
 
   async onModuleDestroy() {
-    try {
-      await this.client.quit();
-    } catch {
-      // ignore shutdown errors
-    }
+    this.store.clear();
   }
 }
-

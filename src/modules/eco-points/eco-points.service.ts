@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { EcoPointsQueryDto } from './dto';
+import { EcoPointsQueryDto, RedeemDto } from './dto';
 import { TIER_THRESHOLDS, ECOPOINTS } from '../../common/constants';
 import { WasteType, Prisma } from '@prisma/client';
 
@@ -146,6 +146,33 @@ export class EcoPointsService {
     return {
       success: true,
       data: leaderboard,
+    };
+  }
+
+  // ─── REDEEM POINTS ──────────────────────────────
+
+  async redeemPoints(userId: string, redeemDto: RedeemDto) {
+    const totalPoints = await this.getTotalPoints(userId);
+    
+    if (totalPoints < redeemDto.points) {
+      throw new BadRequestException('Insufficient EcoPoints for this reward');
+    }
+
+    const transaction = await this.prisma.ecoPointTransaction.create({
+      data: {
+        userId,
+        points: -redeemDto.points,
+        action: 'REDEEM_' + redeemDto.rewardId,
+        description: `Redeemed: ${redeemDto.description}`,
+      },
+    });
+
+    this.logger.log(`User ${userId} redeemed ${redeemDto.points} points for ${redeemDto.rewardId}`);
+
+    return {
+      success: true,
+      message: 'Reward redeemed successfully',
+      data: transaction,
     };
   }
 
