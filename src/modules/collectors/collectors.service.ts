@@ -72,7 +72,6 @@ export class CollectorsService {
       this.prisma.pickup.count({
         where: {
           collectorId: collectorProfile.id,
-          scheduledDate: { gte: today, lt: tomorrow },
           status: { notIn: [PickupStatus.CANCELLED] },
         },
       }),
@@ -190,7 +189,6 @@ export class CollectorsService {
       this.prisma.pickup.count({
         where: {
           collectorId: collectorProfile.id,
-          scheduledDate: { gte: todayStart, lte: todayEnd },
           status: { notIn: [PickupStatus.COMPLETED, PickupStatus.CANCELLED] },
         },
       }),
@@ -238,6 +236,7 @@ export class CollectorsService {
       throw new ForbiddenException('You are not registered as a collector.');
     }
     this.assertApproved(collectorProfile);
+    console.log(`[DEBUG] getTodayPickups for userId: ${userId}, collectorProfileId: ${collectorProfile.id}`);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -247,10 +246,6 @@ export class CollectorsService {
     const pickups = await this.prisma.pickup.findMany({
       where: {
         collectorId: collectorProfile.id,
-        scheduledDate: {
-          gte: today,
-          lt: tomorrow,
-        },
         status: {
           notIn: [PickupStatus.CANCELLED, PickupStatus.COMPLETED],
         },

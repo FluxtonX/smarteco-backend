@@ -1,7 +1,7 @@
 import {Controller,Post,Body,UseGuards,HttpCode,HttpStatus,} from '@nestjs/common';
 import {ApiTags,ApiOperation,ApiResponse,ApiBearerAuth,} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import {SendOtpDto,VerifyOtpDto,RefreshTokenDto,GoogleLoginDto,} from './dto';
+import {SendOtpDto,VerifyOtpDto,RefreshTokenDto,GoogleLoginDto,AdminLoginDto,} from './dto';
 import { JwtAuthGuard } from './guards';
 import { CurrentUser } from '../../common/decorators';
 
@@ -146,5 +146,20 @@ export class AuthController {
   })
   async googleLogin(@Body() dto: GoogleLoginDto) {
     return this.authService.googleLogin(dto);
+  }
+
+  @Post('admin/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Admin Login',
+    description: 'Authenticate administrator using email and password configured in environment.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin login successful',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid admin credentials' })
+  async adminLogin(@Body() dto: AdminLoginDto) {
+    return this.authService.adminLogin(dto);
   }
 }
