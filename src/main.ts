@@ -13,28 +13,21 @@ async function bootstrap() {
   // ─── Global Prefix ────────────────────────────────
   app.setGlobalPrefix(API_PREFIX);
 
-  // ─── CORS ─────────────────────────────────────────
   app.enableCors({
-  origin: [
-    'https://smarteco-admin-panel-nine.vercel.app',
-    'http://localhost:3000',
-    /https:\/\/.*\.ngrok-free\.app$/,
-    /https:\/\/.*\.ngrok-free\.dev$/,
-  ],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-});
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(204);
-    return;
-  }
-
-  next();
-});
+    origin: [
+      'https://smarteco-admin-panel-nine.vercel.app',
+      'http://localhost:3000',
+      /https:\/\/.*\.ngrok-free\.app$/,
+      /https:\/\/.*\.ngrok-free\.dev$/,
+    ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'ngrok-skip-browser-warning',
+    ],
+    credentials: true,
+  });
 
   // ─── Global Validation Pipe ───────────────────────
   app.useGlobalPipes(
