@@ -17,6 +17,7 @@ async function bootstrap() {
     origin: [
       'https://smarteco-admin-panel-nine.vercel.app',
       'http://localhost:3000',
+      'http://localhost:3001',
       /https:\/\/.*\.ngrok-free\.app$/,
       /https:\/\/.*\.ngrok-free\.dev$/,
     ],

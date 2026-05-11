@@ -403,6 +403,7 @@ export class AdminService {
 
   async getCollectors() {
     const collectors = await this.prisma.collectorProfile.findMany({
+      where: { isApproved: true },
       include: {
         user: {
           select: {
