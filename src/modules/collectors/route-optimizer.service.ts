@@ -116,4 +116,3 @@ export class RouteOptimizerService {
     return deg * (Math.PI / 180);
   }
 }
-

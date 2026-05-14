@@ -37,6 +37,9 @@ export class UsersService {
         role: true,
         referralCode: true,
         avatarUrl: true,
+        defaultAddress: true,
+        homeLatitude: true,
+        homeLongitude: true,
         isActive: true,
         createdAt: true,
         collectorProfile: {
@@ -99,6 +102,15 @@ export class UsersService {
         ...(dto.email !== undefined && { email: dto.email }),
         ...(dto.userType !== undefined && { userType: dto.userType }),
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
+        ...(dto.defaultAddress !== undefined && {
+          defaultAddress: dto.defaultAddress,
+        }),
+        ...(dto.homeLatitude !== undefined && {
+          homeLatitude: dto.homeLatitude,
+        }),
+        ...(dto.homeLongitude !== undefined && {
+          homeLongitude: dto.homeLongitude,
+        }),
       },
       select: {
         id: true,
@@ -110,6 +122,9 @@ export class UsersService {
         role: true,
         referralCode: true,
         avatarUrl: true,
+        defaultAddress: true,
+        homeLatitude: true,
+        homeLongitude: true,
       },
     });
 

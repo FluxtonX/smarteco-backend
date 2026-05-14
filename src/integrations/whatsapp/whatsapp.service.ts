@@ -3,6 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import axios, { AxiosError } from 'axios';
 import { getWhatsAppTemplates } from './whatsapp-templates';
+import {
+  CommunicationChannel,
+  CommunicationDirection,
+  CommunicationStatus,
+} from '@prisma/client';
 
 interface TwilioMessageResponse {
   sid: string;
@@ -53,7 +58,15 @@ export class WhatsAppService {
       this.logger.warn(
         `WhatsApp not configured — mock sending to ${to}: "${body.substring(0, 50)}..."`,
       );
-      return { sid: `mock-${Date.now()}`, status: 'queued' };
+      const result = { sid: `mock-${Date.now()}`, status: 'queued' };
+      await this.logMessage(
+        to,
+        body,
+        CommunicationDirection.OUTBOUND,
+        CommunicationStatus.QUEUED,
+        result.sid,
+      );
+      return result;
     }
 
     try {
@@ -92,6 +105,13 @@ export class WhatsAppService {
       );
 
       this.logger.log(`WhatsApp sent to ${to}: SID=${response.data.sid}`);
+      await this.logMessage(
+        to,
+        body || options?.contentSid || '',
+        CommunicationDirection.OUTBOUND,
+        CommunicationStatus.SENT,
+        response.data.sid,
+      );
       return {
         sid: response.data.sid,
         status: response.data.status,
@@ -123,13 +143,22 @@ export class WhatsAppService {
       const user = await this.prisma.user.findUnique({ where: { phone } });
 
       if (!user) {
-        return this.buildResponse([
+        const response = this.buildResponse([
           '👋 Welcome to SmartEco!',
           '',
           "You're not registered yet.",
           'Download the SmartEco app to get started:',
           '📱 https://smarteco.rw/download',
         ]);
+        await this.logMessage(
+          phone,
+          body,
+          CommunicationDirection.INBOUND,
+          CommunicationStatus.RECEIVED,
+          undefined,
+          { response },
+        );
+        return response;
       }
 
       // Handle commands
@@ -142,27 +171,81 @@ export class WhatsAppService {
         if (this.interactiveMenuContentSid) {
           await this.sendInteractiveMenu(phone, user.firstName || 'there');
         }
-        return this.mainMenu(user.firstName || 'there');
+        const response = this.mainMenu(user.firstName || 'there');
+        await this.logMessage(
+          phone,
+          body,
+          CommunicationDirection.INBOUND,
+          CommunicationStatus.RECEIVED,
+          undefined,
+          { userId: user.id, response },
+        );
+        return response;
       }
 
       if (input === '1' || input === 'status' || input === 'pickup') {
-        return this.getPickupStatus(user.id);
+        const response = await this.getPickupStatus(user.id);
+        await this.logMessage(
+          phone,
+          body,
+          CommunicationDirection.INBOUND,
+          CommunicationStatus.RECEIVED,
+          undefined,
+          { userId: user.id, response },
+        );
+        return response;
       }
 
       if (input === '2' || input === 'points' || input === 'eco') {
-        return this.getEcoPoints(user.id);
+        const response = await this.getEcoPoints(user.id);
+        await this.logMessage(
+          phone,
+          body,
+          CommunicationDirection.INBOUND,
+          CommunicationStatus.RECEIVED,
+          undefined,
+          { userId: user.id, response },
+        );
+        return response;
       }
 
       if (input === '3' || input === 'bins' || input === 'bin') {
-        return this.getBinStatus(user.id);
+        const response = await this.getBinStatus(user.id);
+        await this.logMessage(
+          phone,
+          body,
+          CommunicationDirection.INBOUND,
+          CommunicationStatus.RECEIVED,
+          undefined,
+          { userId: user.id, response },
+        );
+        return response;
       }
 
       if (input === '4' || input === 'help' || input === 'support') {
-        return this.getSupport();
+        const response = this.getSupport();
+        await this.logMessage(
+          phone,
+          body,
+          CommunicationDirection.INBOUND,
+          CommunicationStatus.RECEIVED,
+          undefined,
+          { userId: user.id, response },
+        );
+        return response;
       }
 
       // Default — show menu
-      return this.mainMenu(user.firstName || 'there');
+      const response = this.mainMenu(user.firstName || 'there');
+      await this.logMessage(
+        phone,
+        body,
+        CommunicationDirection.INBOUND,
+        CommunicationStatus.RECEIVED,
+        undefined,
+        { userId: user.id, response },
+      );
+      return response;
     } catch (error) {
       this.logger.error(
         `WhatsApp processing error: ${(error as Error).message}`,
@@ -450,5 +533,27 @@ export class WhatsAppService {
 
   private buildResponse(lines: string[]): string {
     return lines.join('\n');
+  }
+
+  private async logMessage(
+    phone: string,
+    message: string,
+    direction: CommunicationDirection,
+    status: CommunicationStatus,
+    providerRef?: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    await this.prisma.communicationLog.create({
+      data: {
+        channel: CommunicationChannel.WHATSAPP,
+        direction,
+        status,
+        phone,
+        subject: 'WhatsApp',
+        message: message || '<template>',
+        providerRef,
+        metadata: metadata as any,
+      },
+    });
   }
 }

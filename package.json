@@ -18,9 +18,14 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "studio": "npx prisma studio"
+    "studio": "npx prisma studio",
+    "db:push": "npx prisma db push --force-reset",
+    "db:reset": "npx prisma migrate reset --force",
+    "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",

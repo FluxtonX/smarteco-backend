@@ -9,7 +9,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { MomoService } from '../../integrations/momo/momo.service';
 import { AirtelService } from '../../integrations/airtel/airtel.service';
 import { InitiatePaymentDto, PaymentMethodEnum } from './dto';
-import { PaymentStatus, PaymentMethod } from '@prisma/client';
+import { PaymentStatus, PaymentMethod, Prisma } from '@prisma/client';
 import { PaginationDto } from '../../common/dto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -314,16 +314,37 @@ export class PaymentsService {
     }
 
     if (!transactionRef) {
+      await this.prisma.paymentWebhookLog.create({
+        data: {
+          provider:
+            provider === 'airtel'
+              ? PaymentMethod.AIRTEL_MONEY
+              : PaymentMethod.MTN_MOMO,
+          payload: body as Prisma.InputJsonValue,
+        },
+      });
       this.logger.warn('Webhook received without transaction reference');
       return { received: true };
     }
 
     // Find and update payment
     const payment = await this.prisma.payment.findFirst({
-      where: { transactionRef },
+      where: {
+        OR: [{ transactionRef }, { externalRef: transactionRef }],
+      },
     });
 
     if (!payment) {
+      await this.prisma.paymentWebhookLog.create({
+        data: {
+          provider:
+            provider === 'airtel'
+              ? PaymentMethod.AIRTEL_MONEY
+              : PaymentMethod.MTN_MOMO,
+          transactionRef,
+          payload: body as Prisma.InputJsonValue,
+        },
+      });
       this.logger.warn(`Payment not found for ref: ${transactionRef}`);
       return { received: true };
     }
@@ -360,6 +381,17 @@ export class PaymentsService {
         paidAt: newStatus === PaymentStatus.COMPLETED ? new Date() : null,
         failedAt: newStatus === PaymentStatus.FAILED ? new Date() : null,
         failReason: newStatus === PaymentStatus.FAILED ? reason : null,
+      },
+    });
+
+    await this.prisma.paymentWebhookLog.create({
+      data: {
+        paymentId: payment.id,
+        provider: payment.method,
+        transactionRef: payment.transactionRef,
+        externalRef: payment.externalRef,
+        status: newStatus,
+        payload: body as Prisma.InputJsonValue,
       },
     });
 

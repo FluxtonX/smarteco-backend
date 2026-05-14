@@ -4,9 +4,10 @@ import { CollectorsService } from './collectors.service';
 import { EcoPointsModule } from '../eco-points/eco-points.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RouteOptimizerService } from './route-optimizer.service';
+import { StorageModule } from '../../integrations/storage';
 
 @Module({
-  imports: [EcoPointsModule, NotificationsModule],
+  imports: [EcoPointsModule, NotificationsModule, StorageModule],
   controllers: [CollectorsController],
   providers: [CollectorsService, RouteOptimizerService],
   exports: [CollectorsService],

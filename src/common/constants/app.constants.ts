@@ -54,6 +54,8 @@ export const PICKUP_PRICES = {
   HAZARDOUS: 700,
 };
 
+export const MAX_COLLECTOR_ASSIGNMENT_DISTANCE_KM = 25;
+
 // ─── Bin ─────────────────────────────────────────
 
 export const BIN_QR_PREFIX = 'BIN-';
@@ -67,6 +69,27 @@ export const BIN_WASTE_TYPES = [
   'EWASTE',
   'GENERAL',
   'HAZARDOUS',
+] as const;
+
+export const ECOPOINT_REWARD_CATALOG = [
+  {
+    id: 'AIRTIME_1000_RWF',
+    label: 'Airtime - 1,000 RWF',
+    points: 500,
+    type: 'AIRTIME',
+  },
+  {
+    id: 'PICKUP_DISCOUNT_1000_RWF',
+    label: 'Pickup discount - 1,000 RWF',
+    points: 600,
+    type: 'PICKUP_DISCOUNT',
+  },
+  {
+    id: 'AIRTEL_MONEY_2000_RWF',
+    label: 'Airtel Money - 2,000 RWF',
+    points: 1000,
+    type: 'AIRTEL_DISBURSEMENT',
+  },
 ] as const;
 
 // ─── Collector ───────────────────────────────────

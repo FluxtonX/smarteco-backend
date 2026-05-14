@@ -1,7 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
-import { PickupStatus, WasteType, TimeSlot } from '@prisma/client';
+import {
+  CommunicationChannel,
+  CommunicationDirection,
+  CommunicationStatus,
+  PickupStatus,
+  WasteType,
+  TimeSlot,
+} from '@prisma/client';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 
 // USSD session state
@@ -48,24 +55,38 @@ export class UssdService {
     try {
       // First level — show main menu
       if (text === '') {
-        return this.mainMenu();
+        const response = this.mainMenu();
+        await this.logUssd(phone, text, response);
+        return response;
       }
 
       const firstChoice = inputs[0];
 
       switch (firstChoice) {
         case '1':
-          return this.handleSchedulePickup(phone, inputs, level);
+          return this.withLog(
+            phone,
+            text,
+            this.handleSchedulePickup(phone, inputs, level),
+          );
         case '2':
-          return this.handleCheckStatus(phone);
+          return this.withLog(phone, text, this.handleCheckStatus(phone));
         case '3':
-          return this.handleEcoPoints(phone);
+          return this.withLog(phone, text, this.handleEcoPoints(phone));
         case '4':
-          return this.handleBinStatus(phone);
+          return this.withLog(phone, text, this.handleBinStatus(phone));
         case '5':
-          return this.handleContactSupport();
+          return this.withLog(
+            phone,
+            text,
+            Promise.resolve(this.handleContactSupport()),
+          );
         default:
-          return 'END Invalid option. Please try again.';
+          return this.withLog(
+            phone,
+            text,
+            Promise.resolve('END Invalid option. Please try again.'),
+          );
       }
     } catch (error) {
       this.logger.error(
@@ -336,5 +357,29 @@ export class UssdService {
       '',
       'Hours: Mon-Sat 7AM-7PM',
     ].join('\n');
+  }
+
+  private async withLog(
+    phone: string,
+    input: string,
+    responsePromise: Promise<string>,
+  ) {
+    const response = await responsePromise;
+    await this.logUssd(phone, input, response);
+    return response;
+  }
+
+  private async logUssd(phone: string, input: string, response: string) {
+    await this.prisma.communicationLog.create({
+      data: {
+        channel: CommunicationChannel.USSD,
+        direction: CommunicationDirection.INBOUND,
+        status: CommunicationStatus.RECEIVED,
+        phone,
+        subject: 'USSD Session',
+        message: input || '<start>',
+        metadata: { response },
+      },
+    });
   }
 }

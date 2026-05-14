@@ -1,8 +1,12 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { EcoPointsQueryDto, RedeemDto } from './dto';
-import { TIER_THRESHOLDS, ECOPOINTS } from '../../common/constants';
-import { WasteType, Prisma } from '@prisma/client';
+import {
+  TIER_THRESHOLDS,
+  ECOPOINTS,
+  ECOPOINT_REWARD_CATALOG,
+} from '../../common/constants';
+import { RedemptionStatus, WasteType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class EcoPointsService {
@@ -151,28 +155,72 @@ export class EcoPointsService {
 
   // ─── REDEEM POINTS ──────────────────────────────
 
+  getRewardCatalog() {
+    return {
+      success: true,
+      data: ECOPOINT_REWARD_CATALOG,
+    };
+  }
+
   async redeemPoints(userId: string, redeemDto: RedeemDto) {
+    const reward = ECOPOINT_REWARD_CATALOG.find(
+      (item) => item.id === redeemDto.rewardId,
+    );
+
+    if (!reward) {
+      throw new BadRequestException('Unknown EcoPoints reward');
+    }
+
+    if (reward.points !== redeemDto.points) {
+      throw new BadRequestException(
+        `Reward ${reward.id} requires ${reward.points} EcoPoints`,
+      );
+    }
+
     const totalPoints = await this.getTotalPoints(userId);
-    
+
     if (totalPoints < redeemDto.points) {
       throw new BadRequestException('Insufficient EcoPoints for this reward');
     }
 
-    const transaction = await this.prisma.ecoPointTransaction.create({
-      data: {
-        userId,
-        points: -redeemDto.points,
-        action: 'REDEEM_' + redeemDto.rewardId,
-        description: `Redeemed: ${redeemDto.description}`,
-      },
-    });
+    const [transaction, redemption] = await this.prisma.$transaction([
+      this.prisma.ecoPointTransaction.create({
+        data: {
+          userId,
+          points: -reward.points,
+          action: `REDEEM_${reward.id}`,
+          description: `Redeemed: ${reward.label}`,
+        },
+      }),
+      this.prisma.redemption.create({
+        data: {
+          userId,
+          rewardId: reward.id,
+          rewardLabel: reward.label,
+          points: reward.points,
+          status:
+            reward.type === 'AIRTEL_DISBURSEMENT'
+              ? RedemptionStatus.PENDING
+              : RedemptionStatus.COMPLETED,
+          completedAt:
+            reward.type === 'AIRTEL_DISBURSEMENT' ? null : new Date(),
+          metadata: reward as unknown as Prisma.InputJsonValue,
+        },
+      }),
+    ]);
 
-    this.logger.log(`User ${userId} redeemed ${redeemDto.points} points for ${redeemDto.rewardId}`);
+    this.logger.log(
+      `User ${userId} redeemed ${reward.points} points for ${reward.id}`,
+    );
 
     return {
       success: true,
       message: 'Reward redeemed successfully',
-      data: transaction,
+      data: {
+        ...transaction,
+        reward,
+        redemption,
+      },
     };
   }
 

@@ -15,12 +15,14 @@ import {
   ECOPOINTS,
   PICKUP_PRICES,
   DEFAULT_CURRENCY,
+  MAX_COLLECTOR_ASSIGNMENT_DISTANCE_KM,
 } from '../../common/constants';
 import {
   PickupStatus,
   WasteType,
   PaymentMethod,
   PaymentStatus,
+  NotificationType,
   Prisma,
 } from '@prisma/client';
 import { MomoService } from '../../integrations/momo/momo.service';
@@ -91,9 +93,10 @@ export class PickupsService {
     // Estimate points for the pickup
     const estimatedPoints = this.estimatePoints(dto.wasteType);
 
-    // Pickups are assigned to collectors by admins only.
-    // Keep pickup in PENDING until an admin assigns a collector.
-    const assignedCollector = null;
+    const assignedCollector = await this.findNearestAvailableCollector(
+      dto.latitude,
+      dto.longitude,
+    );
 
     // Calculate payment amount
     const amount = PICKUP_PRICES[dto.wasteType] || 100;
@@ -165,8 +168,10 @@ export class PickupsService {
         longitude: dto.longitude,
         notes: dto.notes,
         binId: dto.binId,
-        status: PickupStatus.PENDING,
-        collectorId: null,
+        status: assignedCollector
+          ? PickupStatus.COLLECTOR_ASSIGNED
+          : PickupStatus.PENDING,
+        collectorId: assignedCollector?.id ?? null,
         payment: {
           create: {
             userId,
@@ -202,12 +207,27 @@ export class PickupsService {
     // Notify user via all channels (Push, SMS, WhatsApp)
     await this.notificationsService.dispatchLifecycleNotification(
       userId,
-      'Pickup Scheduled',
-      `SmartEco: Pickup ${reference} scheduled for ${dto.timeSlot}. Status: PENDING.`,
+      assignedCollector
+        ? 'Pickup Scheduled - Collector Assigned'
+        : 'Pickup Scheduled',
+      `SmartEco: Pickup ${reference} scheduled for ${dto.timeSlot}. Status: ${pickup.status}.`,
       { pickupId: pickup.id, reference: pickup.reference },
       ['IN_APP', 'PUSH', 'SMS', 'WHATSAPP'],
     );
 
+    if (assignedCollector) {
+      await this.notificationsService.createNotification(
+        assignedCollector.userId,
+        'New Pickup Assigned',
+        `Pickup ${reference} was auto-assigned to you based on proximity.`,
+        NotificationType.PUSH,
+        {
+          pickupId: pickup.id,
+          reference: pickup.reference,
+          distanceKm: assignedCollector.distanceKm,
+        },
+      );
+    }
 
     return {
       success: true,
@@ -587,6 +607,75 @@ export class PickupsService {
     return reference!;
   }
 
+  private async findNearestAvailableCollector(
+    latitude: number,
+    longitude: number,
+  ) {
+    const collectors = await this.prisma.collectorProfile.findMany({
+      where: {
+        isApproved: true,
+        isAvailable: true,
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        id: true,
+        userId: true,
+        latitude: true,
+        longitude: true,
+        totalPickups: true,
+      },
+    });
+
+    const ranked = collectors
+      .filter(
+        (collector) =>
+          collector.latitude != null && collector.longitude != null,
+      )
+      .map((collector) => ({
+        ...collector,
+        distanceKm: this.haversineDistance(
+          latitude,
+          longitude,
+          collector.latitude!,
+          collector.longitude!,
+        ),
+      }))
+      .filter(
+        (collector) =>
+          collector.distanceKm <= MAX_COLLECTOR_ASSIGNMENT_DISTANCE_KM,
+      )
+      .sort((a, b) => {
+        if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+        return a.totalPickups - b.totalPickups;
+      });
+
+    return ranked[0] ?? null;
+  }
+
+  private haversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const radiusKm = 6371;
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRad(lat1)) *
+        Math.cos(this.toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return radiusKm * c;
+  }
+
+  private toRad(degrees: number): number {
+    return degrees * (Math.PI / 180);
+  }
+
   private estimatePoints(wasteType: WasteType): number {
     // Returns estimated points per pickup (assuming ~1kg)
     const pointsMap: Record<string, number> = {
@@ -598,76 +687,6 @@ export class PickupsService {
       HAZARDOUS: ECOPOINTS.HAZARDOUS_PER_ITEM,
     };
     return pointsMap[wasteType] || 10;
-  }
-
-  private haversineDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ): number {
-    const R = 6371; // Earth's radius in km
-    const dLat = this.toRad(lat2 - lat1);
-    const dLon = this.toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRad(lat1)) *
-        Math.cos(this.toRad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-  private toRad(deg: number): number {
-    return deg * (Math.PI / 180);
-  }
-
-  /**
-   * Deprecated: collector assignment is handled by admins only.
-   */
-  private findBestCollector(
-    collectors: {
-      id: string;
-      userId: string;
-      latitude: number | null;
-      longitude: number | null;
-      totalPickups: number;
-    }[],
-    pickupLat: number,
-    pickupLon: number,
-  ) {
-    if (collectors.length === 0) return null;
-
-    // Score each collector: lower is better (distance + pickup load)
-    let bestCollector = collectors[0];
-    let bestDistance = Infinity;
-
-    for (const c of collectors) {
-      if (c.latitude && c.longitude) {
-        const dist = this.haversineDistance(
-          c.latitude,
-          c.longitude,
-          pickupLat,
-          pickupLon,
-        );
-        // If closer, or same distance but fewer pickups → prefer this one
-        if (
-          dist < bestDistance ||
-          (dist === bestDistance && c.totalPickups < bestCollector.totalPickups)
-        ) {
-          bestDistance = dist;
-          bestCollector = c;
-        }
-      } else if (bestDistance === Infinity) {
-        // No location data — fallback to least busy
-        if (c.totalPickups < bestCollector.totalPickups) {
-          bestCollector = c;
-        }
-      }
-    }
-
-    return bestCollector;
   }
 
   private formatCollector(collector: CollectorWithUser) {
