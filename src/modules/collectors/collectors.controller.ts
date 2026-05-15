@@ -25,6 +25,7 @@ import {
   RegisterMeDto,
   ToggleAvailabilityDto,
   CollectorHistoryQueryDto,
+  CollectorDocumentUploadDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -56,6 +57,21 @@ export class CollectorsController {
     @Body() dto: RegisterMeDto,
   ) {
     return this.collectorsService.registerMe(userId, dto);
+  }
+
+  @Post('me/document-upload-url')
+  @Roles(UserRole.USER, UserRole.COLLECTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Create S3 presigned upload URL for collector documents',
+    description:
+      'Returns a short-lived S3 PUT URL for license or ID upload. Submit the returned key/url in register-me.',
+  })
+  async createDocumentUploadUrl(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CollectorDocumentUploadDto,
+  ) {
+    return this.collectorsService.createDocumentUploadUrl(userId, dto);
   }
 
   // ─── PROFILE ────────────────────────────────────
@@ -115,9 +131,7 @@ export class CollectorsController {
           thisWeek: { completed: 18, weightKg: 86.3 },
           thisMonth: { completed: 72, weightKg: 345.1 },
           allTime: { completed: 245, weightKg: 1860 },
-          byWasteType: [
-            { wasteType: 'ORGANIC', count: 120, weightKg: 890 },
-          ],
+          byWasteType: [{ wasteType: 'ORGANIC', count: 120, weightKg: 890 }],
           rating: 4.8,
         },
       },

@@ -15,6 +15,12 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
+      'https://smarteco.rw',
+      'http://smarteco.rw',
+      'https://www.smarteco.rw',
+      'http://www.smarteco.rw',
+      'https://admin.smarteco.rw',
+      'http://admin.smarteco.rw',
       'https://smarteco-admin-panel-nine.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001',

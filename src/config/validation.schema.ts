@@ -43,10 +43,16 @@ export const validationSchema = Joi.object({
   TWILIO_WHATSAPP_NUMBER: Joi.string().allow('').optional(),
   TWILIO_WHATSAPP_FROM: Joi.string().allow('').optional(),
   TWILIO_WHATSAPP_MENU_CONTENT_SID: Joi.string().allow('').optional(),
-  TWILIO_WHATSAPP_PICKUP_SCHEDULED_CONTENT_SID: Joi.string().allow('').optional(),
-  TWILIO_WHATSAPP_COLLECTOR_ASSIGNED_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_PICKUP_SCHEDULED_CONTENT_SID: Joi.string()
+    .allow('')
+    .optional(),
+  TWILIO_WHATSAPP_COLLECTOR_ASSIGNED_CONTENT_SID: Joi.string()
+    .allow('')
+    .optional(),
   TWILIO_WHATSAPP_EN_ROUTE_CONTENT_SID: Joi.string().allow('').optional(),
-  TWILIO_WHATSAPP_PICKUP_COMPLETED_CONTENT_SID: Joi.string().allow('').optional(),
+  TWILIO_WHATSAPP_PICKUP_COMPLETED_CONTENT_SID: Joi.string()
+    .allow('')
+    .optional(),
   TWILIO_SMS_FROM: Joi.string().allow('').optional(),
 
   // Firebase (optional for dev)
@@ -56,4 +62,14 @@ export const validationSchema = Joi.object({
 
   // Google Maps (optional for dev)
   GOOGLE_MAPS_API_KEY: Joi.string().allow('').optional(),
+
+  // IoT device sync
+  IOT_DEVICE_API_KEY: Joi.string().allow('').optional(),
+
+  // AWS S3 document uploads
+  AWS_REGION: Joi.string().default('us-east-1'),
+  AWS_ACCESS_KEY_ID: Joi.string().allow('').optional(),
+  AWS_SECRET_ACCESS_KEY: Joi.string().allow('').optional(),
+  AWS_S3_BUCKET: Joi.string().allow('').optional(),
+  AWS_S3_PUBLIC_BASE_URL: Joi.string().allow('').optional(),
 });

@@ -37,6 +37,9 @@ export class UsersService {
         role: true,
         referralCode: true,
         avatarUrl: true,
+        defaultAddress: true,
+        homeLatitude: true,
+        homeLongitude: true,
         isActive: true,
         createdAt: true,
         collectorProfile: {
@@ -99,6 +102,15 @@ export class UsersService {
         ...(dto.email !== undefined && { email: dto.email }),
         ...(dto.userType !== undefined && { userType: dto.userType }),
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
+        ...(dto.defaultAddress !== undefined && {
+          defaultAddress: dto.defaultAddress,
+        }),
+        ...(dto.homeLatitude !== undefined && {
+          homeLatitude: dto.homeLatitude,
+        }),
+        ...(dto.homeLongitude !== undefined && {
+          homeLongitude: dto.homeLongitude,
+        }),
       },
       select: {
         id: true,
@@ -110,14 +122,39 @@ export class UsersService {
         role: true,
         referralCode: true,
         avatarUrl: true,
+        defaultAddress: true,
+        homeLatitude: true,
+        homeLongitude: true,
+        createdAt: true,
+        collectorProfile: {
+          select: {
+            id: true,
+            isApproved: true,
+            collectorName: true,
+          },
+        },
       },
+    });
+
+    const totalPoints = await this.getTotalPoints(userId);
+    const tier = this.calculateTier(totalPoints);
+    const tierInfo = TIER_THRESHOLDS[tier];
+    const totalPickups = await this.prisma.pickup.count({
+      where: { userId, status: 'COMPLETED' },
     });
 
     await this.redis.del(`cache:user:profile:${userId}`);
     return {
       success: true,
       message: 'Profile updated successfully',
-      data: updatedUser,
+      data: {
+        ...updatedUser,
+        ecoPoints: totalPoints,
+        ecoTier: tier,
+        tierMultiplier: tierInfo.multiplier,
+        totalPickups,
+        memberSince: updatedUser.createdAt,
+      },
     };
   }
 

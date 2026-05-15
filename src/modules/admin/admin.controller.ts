@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Body,
   Param,
@@ -20,12 +21,23 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, AssignCollectorDto, ApproveCollectorDto } from './dto';
+import {
+  AdminUserQueryDto,
+  UpdateUserDto,
+  CreateCollectorDto,
+  AssignCollectorDto,
+  ApproveCollectorDto,
+} from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import {
+  AuditStatus,
+  CommunicationChannel,
+  SupportDisputeStatus,
+  UserRole,
+} from '@prisma/client';
 import { CurrentUser } from '../../common/decorators';
 
 @ApiTags('Admin')
@@ -101,6 +113,115 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Admin access required' })
   async getUsers(@Query() query: AdminUserQueryDto) {
     return this.adminService.getUsers(query);
+  }
+
+  @Get('bins')
+  async getBins() {
+    return this.adminService.getBins();
+  }
+
+  @Get('analytics/bins')
+  async getBinAnalytics() {
+    return this.adminService.getBinAnalytics();
+  }
+
+  @Get('iot/devices')
+  async getIotDevices() {
+    return this.adminService.getIotDevices();
+  }
+
+  @Get('iot/telemetry')
+  async getIotTelemetry(@Query('limit') limit?: string) {
+    return this.adminService.getIotTelemetry(limit ? Number(limit) : 100);
+  }
+
+  @Get('communication-logs')
+  async getCommunicationLogs(
+    @Query('channel') channel?: CommunicationChannel,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.getCommunicationLogs(
+      channel,
+      limit ? Number(limit) : 100,
+    );
+  }
+
+  @Get('payment-webhooks')
+  async getPaymentWebhookLogs(@Query('limit') limit?: string) {
+    return this.adminService.getPaymentWebhookLogs(limit ? Number(limit) : 100);
+  }
+
+  @Get('support-disputes')
+  async getSupportDisputes(@Query('status') status?: SupportDisputeStatus) {
+    return this.adminService.getSupportDisputes(status);
+  }
+
+  @Patch('support-disputes/:id')
+  @HttpCode(HttpStatus.OK)
+  async updateSupportDispute(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') adminUserId: string,
+    @Body() dto: any,
+  ) {
+    return this.adminService.updateSupportDispute(id, adminUserId, dto);
+  }
+
+  @Get('audit-logs')
+  async getAuditLogs(
+    @Query('search') search?: string,
+    @Query('status') status?: AuditStatus,
+    @Query('module') module?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.getAuditLogs({
+      search,
+      status,
+      module,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('audit-logs/stats')
+  async getAuditStats() {
+    return this.adminService.getAuditStats();
+  }
+
+  @Get('settings')
+  async getSettings() {
+    return this.adminService.getSettings();
+  }
+
+  @Put('settings')
+  async saveSettings(
+    @CurrentUser('id') adminUserId: string,
+    @Body() settings: any,
+  ) {
+    return this.adminService.saveSettings(adminUserId, settings);
+  }
+
+  @Post('settings/reset')
+  @HttpCode(HttpStatus.OK)
+  async resetSettings(@CurrentUser('id') adminUserId: string) {
+    return this.adminService.resetSettings(adminUserId);
+  }
+
+  @Get('reports/templates')
+  async getReportTemplates() {
+    return this.adminService.getReportTemplates();
+  }
+
+  @Get('reports/recent')
+  async getRecentReports() {
+    return this.adminService.getRecentReports();
+  }
+
+  @Post('reports/generate')
+  @HttpCode(HttpStatus.OK)
+  async generateReport(
+    @CurrentUser('id') adminUserId: string,
+    @Body() config: Record<string, unknown>,
+  ) {
+    return this.adminService.generateReport(adminUserId, config);
   }
 
   @Patch('users/:id')

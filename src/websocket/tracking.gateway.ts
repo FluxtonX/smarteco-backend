@@ -28,6 +28,11 @@ interface LocationUpdate {
   pickupId?: string;
 }
 
+interface TrackingContextUpdate {
+  currentGps?: { latitude: number; longitude: number };
+  homeLocation?: { latitude: number; longitude: number };
+}
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -167,9 +172,7 @@ export class TrackingGateway
     const roomName = `pickup:${data.pickupId}`;
     await client.join(roomName);
 
-    this.logger.log(
-      `User ${client.data.userId} joined room ${roomName}`,
-    );
+    this.logger.log(`User ${client.data.userId} joined room ${roomName}`);
 
     client.emit('joined:pickup', {
       pickupId: data.pickupId,
@@ -177,7 +180,10 @@ export class TrackingGateway
     });
 
     // Send last known collector location immediately (if available)
-    if (pickup.collector?.latitude != null && pickup.collector?.longitude != null) {
+    if (
+      pickup.collector?.latitude != null &&
+      pickup.collector?.longitude != null
+    ) {
       client.emit('collector:location:broadcast', {
         collectorId: pickup.collector.id,
         latitude: pickup.collector.latitude,
@@ -200,9 +206,7 @@ export class TrackingGateway
     const roomName = `pickup:${data.pickupId}`;
     await client.leave(roomName);
 
-    this.logger.log(
-      `User ${client.data.userId} left room ${roomName}`,
-    );
+    this.logger.log(`User ${client.data.userId} left room ${roomName}`);
   }
 
   // ─── COLLECTOR LOCATION UPDATES ──────────────────
@@ -252,7 +256,8 @@ export class TrackingGateway
             pickup.latitude,
             pickup.longitude,
           );
-          const avgSpeedKmh = data.speed && data.speed > 5 ? data.speed * 3.6 : 30;
+          const avgSpeedKmh =
+            data.speed && data.speed > 5 ? data.speed * 3.6 : 30;
           const minutes = Math.max(
             1,
             Math.round((distanceKm / avgSpeedKmh) * 60),
@@ -274,18 +279,22 @@ export class TrackingGateway
         }
       } else {
         // Broadcast to all pickups assigned to this collector that are active
-        const collectorProfile =
-          await this.prisma.collectorProfile.findUnique({
-            where: { userId },
-            select: { id: true },
-          });
+        const collectorProfile = await this.prisma.collectorProfile.findUnique({
+          where: { userId },
+          select: { id: true },
+        });
 
         if (collectorProfile) {
           const activePickups = await this.prisma.pickup.findMany({
             where: {
               collectorId: collectorProfile.id,
               status: {
-                in: ['COLLECTOR_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'],
+                in: [
+                  'COLLECTOR_ASSIGNED',
+                  'EN_ROUTE',
+                  'ARRIVED',
+                  'IN_PROGRESS',
+                ],
               },
             },
             select: {
@@ -329,6 +338,109 @@ export class TrackingGateway
         `Failed to update collector location: ${(error as Error).message}`,
       );
     }
+  }
+
+  @SubscribeMessage('tracking:context:update')
+  async handleTrackingContextUpdate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: TrackingContextUpdate,
+  ) {
+    const userId = client.data.userId as string | undefined;
+    if (!userId) {
+      client.emit('error', { message: 'Unauthorized' });
+      return;
+    }
+
+    const anchor = data?.currentGps ?? data?.homeLocation;
+    if (!anchor?.latitude || !anchor?.longitude) {
+      client.emit('error', { message: 'currentGps or homeLocation required' });
+      return;
+    }
+
+    const [collectors, bins] = await Promise.all([
+      this.prisma.collectorProfile.findMany({
+        where: {
+          isApproved: true,
+          isAvailable: true,
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: {
+          id: true,
+          latitude: true,
+          longitude: true,
+          vehiclePlate: true,
+          rating: true,
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              phone: true,
+              avatarUrl: true,
+            },
+          },
+        },
+      }),
+      this.prisma.bin.findMany({
+        where: { userId, status: { not: 'INACTIVE' } },
+        select: {
+          id: true,
+          qrCode: true,
+          wasteType: true,
+          fillLevel: true,
+          latitude: true,
+          longitude: true,
+          status: true,
+        },
+      }),
+    ]);
+
+    const nearestCollector = collectors
+      .filter(
+        (collector) =>
+          collector.latitude != null && collector.longitude != null,
+      )
+      .map((collector) => {
+        const distanceKm = this.haversineDistance(
+          anchor.latitude,
+          anchor.longitude,
+          collector.latitude!,
+          collector.longitude!,
+        );
+        return {
+          id: collector.id,
+          vehiclePlate: collector.vehiclePlate,
+          rating: collector.rating,
+          latitude: collector.latitude,
+          longitude: collector.longitude,
+          distanceKm: Math.round(distanceKm * 10) / 10,
+          user: collector.user,
+        };
+      })
+      .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+
+    const nearestBin = bins
+      .filter((bin) => bin.latitude != null && bin.longitude != null)
+      .map((bin) => {
+        const distanceKm = this.haversineDistance(
+          anchor.latitude,
+          anchor.longitude,
+          bin.latitude!,
+          bin.longitude!,
+        );
+        return {
+          ...bin,
+          distanceKm: Math.round(distanceKm * 10) / 10,
+        };
+      })
+      .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+
+    client.emit('tracking:context:updated', {
+      anchor,
+      nearestCollector: nearestCollector ?? null,
+      nearestBin: nearestBin ?? null,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   // ─── PICKUP STATUS BROADCAST (called from service) ──

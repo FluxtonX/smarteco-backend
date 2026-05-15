@@ -22,7 +22,10 @@ export class NotificationsService {
     title: string,
     body: string,
     data?: Prisma.InputJsonValue,
-    channels: Array<'IN_APP' | 'PUSH' | 'SMS' | 'WHATSAPP'> = ['IN_APP', 'PUSH'],
+    channels: Array<'IN_APP' | 'PUSH' | 'SMS' | 'WHATSAPP'> = [
+      'IN_APP',
+      'PUSH',
+    ],
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -35,13 +38,22 @@ export class NotificationsService {
       const notificationType = channels.includes('PUSH')
         ? NotificationType.PUSH
         : NotificationType.IN_APP;
-      await this.createNotification(userId, title, body, notificationType, data);
+      await this.createNotification(
+        userId,
+        title,
+        body,
+        notificationType,
+        data,
+      );
       delivery.IN_APP = true;
       delivery.PUSH = channels.includes('PUSH');
     }
 
     if (channels.includes('SMS') && user?.phone) {
-      const smsResult = await this.twilioService.sendSms(user.phone, `${title}: ${body}`);
+      const smsResult = await this.twilioService.sendSms(
+        user.phone,
+        `${title}: ${body}`,
+      );
       delivery.SMS = smsResult.success;
     }
 

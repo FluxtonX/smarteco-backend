@@ -106,11 +106,25 @@ export class EcoPointsController {
     return this.ecoPointsService.getLeaderboard();
   }
 
+  @Get('rewards')
+  @ApiOperation({
+    summary: 'Get redeemable EcoPoints rewards',
+    description:
+      'Returns the server-side reward catalog used to validate redemption requests.',
+  })
+  @ApiResponse({ status: 200, description: 'Reward catalog retrieved' })
+  async getRewards() {
+    return this.ecoPointsService.getRewardCatalog();
+  }
+
   @Post('redeem')
   @ApiOperation({ summary: 'Redeem EcoPoints for a reward' })
   @ApiResponse({ status: 201, description: 'Points redeemed successfully' })
   @ApiResponse({ status: 400, description: 'Insufficient points' })
-  async redeemPoints(@CurrentUser('id') userId: string, @Body() body: RedeemDto) {
+  async redeemPoints(
+    @CurrentUser('id') userId: string,
+    @Body() body: RedeemDto,
+  ) {
     return this.ecoPointsService.redeemPoints(userId, body);
   }
 }

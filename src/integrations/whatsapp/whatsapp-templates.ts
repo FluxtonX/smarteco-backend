@@ -17,4 +17,3 @@ export const getWhatsAppTemplates = (): WhatsAppTemplateRegistry => ({
   pickupCompletedSid:
     process.env.TWILIO_WHATSAPP_PICKUP_COMPLETED_CONTENT_SID || undefined,
 });
-

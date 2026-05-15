@@ -12,7 +12,9 @@ export class RedisService implements OnModuleDestroy {
   private store = new Map<string, CacheEntry>();
 
   constructor(private readonly configService: ConfigService) {
-    this.logger.log('RedisService initialized in MVP IN-MEMORY mode (No external Redis server needed).');
+    this.logger.log(
+      'RedisService initialized in MVP IN-MEMORY mode (No external Redis server needed).',
+    );
   }
 
   async get<T = unknown>(key: string): Promise<T | null> {
@@ -28,7 +30,9 @@ export class RedisService implements OnModuleDestroy {
 
       return JSON.parse(entry.payload) as T;
     } catch (e) {
-      this.logger.warn(`In-memory get failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(
+        `In-memory get failed for ${key}: ${(e as Error).message}`,
+      );
       return null;
     }
   }
@@ -40,12 +44,15 @@ export class RedisService implements OnModuleDestroy {
   ): Promise<boolean> {
     try {
       const payload = JSON.stringify(value);
-      const expiry = ttlSeconds && ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null;
-      
+      const expiry =
+        ttlSeconds && ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null;
+
       this.store.set(key, { payload, expiry });
       return true;
     } catch (e) {
-      this.logger.warn(`In-memory set failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(
+        `In-memory set failed for ${key}: ${(e as Error).message}`,
+      );
       return false;
     }
   }
@@ -54,7 +61,9 @@ export class RedisService implements OnModuleDestroy {
     try {
       this.store.delete(key);
     } catch (e) {
-      this.logger.warn(`In-memory del failed for ${key}: ${(e as Error).message}`);
+      this.logger.warn(
+        `In-memory del failed for ${key}: ${(e as Error).message}`,
+      );
     }
   }
 

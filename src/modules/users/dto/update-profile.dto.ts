@@ -1,4 +1,12 @@
-import { IsOptional, IsString, IsEmail, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsEmail,
+  IsEnum,
+  IsNumber,
+  Max,
+  Min,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UserType } from '@prisma/client';
 
@@ -43,4 +51,23 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   avatarUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Default/home pickup address' })
+  @IsOptional()
+  @IsString()
+  defaultAddress?: string;
+
+  @ApiPropertyOptional({ description: 'Home latitude', example: -1.9441 })
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  homeLatitude?: number;
+
+  @ApiPropertyOptional({ description: 'Home longitude', example: 30.0619 })
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  homeLongitude?: number;
 }

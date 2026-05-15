@@ -12,12 +12,20 @@ import {
   RegisterMeDto,
   ToggleAvailabilityDto,
   CollectorHistoryQueryDto,
+  CollectorDocumentUploadDto,
 } from './dto';
 import { EcoPointsService } from '../eco-points/eco-points.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { PickupStatus, BinStatus, Prisma, NotificationType, UserRole } from '@prisma/client';
+import {
+  PickupStatus,
+  BinStatus,
+  Prisma,
+  NotificationType,
+  UserRole,
+} from '@prisma/client';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
 import { RouteOptimizerService } from './route-optimizer.service';
+import { S3StorageService } from '../../integrations/storage';
 
 @Injectable()
 export class CollectorsService {
@@ -29,6 +37,7 @@ export class CollectorsService {
     private readonly notificationsService: NotificationsService,
     private readonly twilioService: TwilioService,
     private readonly routeOptimizer: RouteOptimizerService,
+    private readonly storageService: S3StorageService,
   ) {}
 
   private assertApproved(profile: { isApproved: boolean }) {
@@ -102,7 +111,10 @@ export class CollectorsService {
         avatarUrl: collectorProfile.user.avatarUrl,
         vehiclePlate: collectorProfile.vehiclePlate,
         zone: collectorProfile.zone,
+        zonePolygon: collectorProfile.zonePolygon,
         photoUrl: collectorProfile.photoUrl,
+        licenseDocumentUrl: collectorProfile.licenseDocumentUrl,
+        idDocumentUrl: collectorProfile.idDocumentUrl,
         rating: collectorProfile.rating,
         totalPickups: collectorProfile.totalPickups,
         isAvailable: collectorProfile.isAvailable,
@@ -144,7 +156,10 @@ export class CollectorsService {
     // This month
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const baseWhere = { collectorId: collectorProfile.id, status: PickupStatus.COMPLETED };
+    const baseWhere = {
+      collectorId: collectorProfile.id,
+      status: PickupStatus.COMPLETED,
+    };
 
     const [
       todayStats,
@@ -156,7 +171,10 @@ export class CollectorsService {
     ] = await Promise.all([
       // Today
       this.prisma.pickup.aggregate({
-        where: { ...baseWhere, completedAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          ...baseWhere,
+          completedAt: { gte: todayStart, lte: todayEnd },
+        },
         _count: true,
         _sum: { weightKg: true },
       }),
@@ -236,7 +254,9 @@ export class CollectorsService {
       throw new ForbiddenException('You are not registered as a collector.');
     }
     this.assertApproved(collectorProfile);
-    console.log(`[DEBUG] getTodayPickups for userId: ${userId}, collectorProfileId: ${collectorProfile.id}`);
+    console.log(
+      `[DEBUG] getTodayPickups for userId: ${userId}, collectorProfileId: ${collectorProfile.id}`,
+    );
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -380,7 +400,9 @@ export class CollectorsService {
         cancelReason: pickup.cancelReason,
         createdAt: pickup.createdAt,
         user: {
-          name: `${pickup.user.firstName || ''} ${pickup.user.lastName || ''}`.trim() || 'Unknown',
+          name:
+            `${pickup.user.firstName || ''} ${pickup.user.lastName || ''}`.trim() ||
+            'Unknown',
           phone: pickup.user.phone,
           avatarUrl: pickup.user.avatarUrl,
         },
@@ -451,7 +473,9 @@ export class CollectorsService {
         address: p.address,
         completedAt: p.completedAt,
         user: {
-          name: `${p.user.firstName || ''} ${p.user.lastName || ''}`.trim() || 'Unknown',
+          name:
+            `${p.user.firstName || ''} ${p.user.lastName || ''}`.trim() ||
+            'Unknown',
           phone: p.user.phone,
         },
       })),
@@ -651,7 +675,6 @@ export class CollectorsService {
       ['IN_APP', 'PUSH', 'SMS', 'WHATSAPP'],
     );
 
-
     return {
       success: true,
       message: `Pickup status updated to ${dto.status}`,
@@ -721,7 +744,15 @@ export class CollectorsService {
     });
 
     if (existing) {
-      throw new ForbiddenException('You are already registered as a collector.');
+      throw new ForbiddenException(
+        'You are already registered as a collector.',
+      );
+    }
+
+    if (!dto.licenseDocumentUrl || !dto.idDocumentUrl) {
+      throw new BadRequestException(
+        'License and ID documents are required for collector registration.',
+      );
     }
 
     // Mark user as COLLECTOR immediately, but keep access blocked until approved.
@@ -732,9 +763,16 @@ export class CollectorsService {
           collectorName: dto.collectorName,
           vehiclePlate: dto.vehiclePlate,
           zone: dto.zone,
+          zonePolygon: dto.zonePolygon
+            ? (dto.zonePolygon as unknown as Prisma.InputJsonValue)
+            : undefined,
           latitude: dto.latitude,
           longitude: dto.longitude,
           photoUrl: dto.photoUrl,
+          licenseDocumentUrl: dto.licenseDocumentUrl,
+          licenseDocumentKey: dto.licenseDocumentKey,
+          idDocumentUrl: dto.idDocumentUrl,
+          idDocumentKey: dto.idDocumentKey,
           isApproved: false,
           rating: 0.0,
         },
@@ -757,4 +795,23 @@ export class CollectorsService {
     };
   }
 
+  async createDocumentUploadUrl(
+    userId: string,
+    dto: CollectorDocumentUploadDto,
+  ) {
+    const result = await this.storageService.createCollectorDocumentUploadUrl({
+      userId,
+      documentType: dto.documentType,
+      contentType: dto.contentType,
+      fileName: dto.fileName,
+    });
+
+    return {
+      success: true,
+      data: {
+        documentType: dto.documentType,
+        ...result,
+      },
+    };
+  }
 }

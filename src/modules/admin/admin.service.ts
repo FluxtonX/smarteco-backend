@@ -5,9 +5,23 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { AdminUserQueryDto, UpdateUserDto, CreateCollectorDto, AssignCollectorDto, ApproveCollectorDto } from './dto';
+import {
+  AdminUserQueryDto,
+  UpdateUserDto,
+  CreateCollectorDto,
+  AssignCollectorDto,
+  ApproveCollectorDto,
+} from './dto';
 import { PaginationDto } from '../../common/dto';
-import { UserRole, Prisma, NotificationType } from '@prisma/client';
+import {
+  AuditStatus,
+  CommunicationChannel,
+  IotDeviceStatus,
+  NotificationType,
+  Prisma,
+  SupportDisputeStatus,
+  UserRole,
+} from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
@@ -257,6 +271,331 @@ export class AdminService {
     };
   }
 
+  // ─── OPERATIONAL ADMIN MODULES ─────────────────
+
+  async getBins() {
+    const bins = await this.prisma.bin.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            defaultAddress: true,
+          },
+        },
+        iotDevice: true,
+        pickups: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            collector: {
+              include: {
+                user: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
+        },
+        iotTelemetries: {
+          take: 8,
+          orderBy: { receivedAt: 'desc' },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      data: bins.map((bin) => ({
+        ...bin,
+        user: {
+          ...bin.user,
+          address: bin.user.defaultAddress,
+        },
+        telemetry: bin.iotTelemetries.reverse(),
+      })),
+    };
+  }
+
+  async getBinAnalytics() {
+    const [total, active, maintenance, alerts, byStatus, devices] =
+      await Promise.all([
+        this.prisma.bin.count(),
+        this.prisma.bin.count({ where: { status: 'ACTIVE' } }),
+        this.prisma.bin.count({ where: { status: 'MAINTENANCE' } }),
+        this.prisma.bin.count({
+          where: { OR: [{ status: 'FULL' }, { fillLevel: { gte: 80 } }] },
+        }),
+        this.prisma.bin.groupBy({ by: ['status'], _count: true }),
+        this.prisma.iotDevice.groupBy({ by: ['status'], _count: true }),
+      ]);
+
+    return {
+      success: true,
+      data: {
+        total,
+        active,
+        maintenance,
+        alerts,
+        byStatus: byStatus.map((entry) => ({
+          status: entry.status,
+          count: entry._count,
+        })),
+        devices: devices.map((entry) => ({
+          status: entry.status,
+          count: entry._count,
+        })),
+      },
+    };
+  }
+
+  async getIotDevices() {
+    const devices = await this.prisma.iotDevice.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        bin: { select: { qrCode: true, wasteType: true, fillLevel: true } },
+        user: { select: { phone: true, firstName: true, lastName: true } },
+      },
+    });
+    return { success: true, data: devices };
+  }
+
+  async getIotTelemetry(limit = 100) {
+    const telemetry = await this.prisma.iotTelemetry.findMany({
+      take: Math.min(limit, 500),
+      orderBy: { receivedAt: 'desc' },
+      include: {
+        bin: { select: { qrCode: true, wasteType: true } },
+        device: { select: { deviceId: true, status: true } },
+      },
+    });
+    return { success: true, data: telemetry };
+  }
+
+  async getCommunicationLogs(channel?: CommunicationChannel, limit = 100) {
+    const logs = await this.prisma.communicationLog.findMany({
+      where: channel ? { channel } : {},
+      take: Math.min(limit, 500),
+      orderBy: { createdAt: 'desc' },
+    });
+    return { success: true, data: logs };
+  }
+
+  async getPaymentWebhookLogs(limit = 100) {
+    const logs = await this.prisma.paymentWebhookLog.findMany({
+      take: Math.min(limit, 500),
+      orderBy: { receivedAt: 'desc' },
+      include: {
+        payment: {
+          select: {
+            id: true,
+            transactionRef: true,
+            externalRef: true,
+            amount: true,
+            currency: true,
+            method: true,
+            status: true,
+          },
+        },
+      },
+    });
+    return { success: true, data: logs };
+  }
+
+  async getSupportDisputes(status?: SupportDisputeStatus) {
+    const disputes = await this.prisma.supportDispute.findMany({
+      where: status ? { status } : {},
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: { phone: true, firstName: true, lastName: true, email: true },
+        },
+      },
+    });
+    return { success: true, data: disputes };
+  }
+
+  async updateSupportDispute(
+    id: string,
+    adminUserId: string,
+    dto: {
+      status?: SupportDisputeStatus;
+      priority?: any;
+      assignedTo?: string;
+      resolution?: string;
+    },
+  ) {
+    const dispute = await this.prisma.supportDispute.findUnique({
+      where: { id },
+    });
+    if (!dispute) throw new NotFoundException('Support dispute not found');
+
+    const updated = await this.prisma.supportDispute.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        priority: dto.priority,
+        assignedTo: dto.assignedTo,
+        resolution: dto.resolution,
+        resolvedAt:
+          dto.status === SupportDisputeStatus.RESOLVED ||
+          dto.status === SupportDisputeStatus.CLOSED
+            ? new Date()
+            : undefined,
+      },
+    });
+
+    await this.logAudit(adminUserId, {
+      module: 'Support',
+      action: 'Update Support Dispute',
+      details: `Updated dispute ${id}`,
+      metadata: dto as Prisma.InputJsonValue,
+    });
+
+    return { success: true, data: updated };
+  }
+
+  async getAuditLogs(query: {
+    search?: string;
+    status?: AuditStatus;
+    module?: string;
+    limit?: number;
+  }) {
+    const where: Prisma.AuditLogWhereInput = {};
+    if (query.status) where.status = query.status;
+    if (query.module && query.module !== 'All') where.module = query.module;
+    if (query.search) {
+      where.OR = [
+        { action: { contains: query.search, mode: 'insensitive' } },
+        { details: { contains: query.search, mode: 'insensitive' } },
+        { actorName: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const logs = await this.prisma.auditLog.findMany({
+      where,
+      take: Math.min(query.limit ?? 100, 500),
+      orderBy: { createdAt: 'desc' },
+    });
+    return { success: true, data: logs };
+  }
+
+  async getAuditStats() {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const [totalActionsToday, successfulActions, pendingApproval, points] =
+      await Promise.all([
+        this.prisma.auditLog.count({
+          where: { createdAt: { gte: todayStart } },
+        }),
+        this.prisma.auditLog.count({ where: { status: AuditStatus.SUCCESS } }),
+        this.prisma.collectorProfile.count({ where: { isApproved: false } }),
+        this.prisma.ecoPointTransaction.aggregate({ _sum: { points: true } }),
+      ]);
+
+    return {
+      success: true,
+      data: {
+        totalActionsToday,
+        successfulActions,
+        pendingApproval,
+        totalBonusIssued: points._sum.points ?? 0,
+      },
+    };
+  }
+
+  async getSettings() {
+    const setting = await this.prisma.systemSetting.upsert({
+      where: { key: 'admin_settings' },
+      update: {},
+      create: {
+        key: 'admin_settings',
+        value: this.defaultSettings() as Prisma.InputJsonValue,
+      },
+    });
+    return { success: true, data: setting.value };
+  }
+
+  async saveSettings(adminUserId: string, settings: Prisma.InputJsonValue) {
+    const setting = await this.prisma.systemSetting.upsert({
+      where: { key: 'admin_settings' },
+      update: { value: settings, updatedBy: adminUserId },
+      create: {
+        key: 'admin_settings',
+        value: settings,
+        updatedBy: adminUserId,
+      },
+    });
+    await this.logAudit(adminUserId, {
+      module: 'Settings',
+      action: 'Update System Settings',
+      details: 'Updated admin system settings',
+    });
+    return { success: true, data: setting.value };
+  }
+
+  async resetSettings(adminUserId: string) {
+    const defaults = this.defaultSettings() as Prisma.InputJsonValue;
+    const setting = await this.prisma.systemSetting.upsert({
+      where: { key: 'admin_settings' },
+      update: { value: defaults, updatedBy: adminUserId },
+      create: {
+        key: 'admin_settings',
+        value: defaults,
+        updatedBy: adminUserId,
+      },
+    });
+    await this.logAudit(adminUserId, {
+      module: 'Settings',
+      action: 'Reset System Settings',
+      details: 'Reset admin system settings to defaults',
+    });
+    return { success: true, data: setting.value };
+  }
+
+  async getReportTemplates() {
+    return {
+      success: true,
+      data: [
+        { id: 'ops', title: 'Daily Operations Report', icon: 'operations' },
+        { id: 'fin', title: 'Financial Report', icon: 'financial' },
+        { id: 'usr', title: 'User Activity Report', icon: 'user' },
+        { id: 'col', title: 'Collector Performance', icon: 'collector' },
+        { id: 'wst', title: 'Waste Analytics', icon: 'waste' },
+        { id: 'iot', title: 'IoT System Status', icon: 'iot' },
+      ],
+    };
+  }
+
+  async getRecentReports() {
+    const logs = await this.prisma.auditLog.findMany({
+      where: { module: 'Reports' },
+      take: 20,
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      success: true,
+      data: logs.map((log) => ({
+        id: log.id,
+        name: log.details || log.action,
+        date: log.createdAt.toISOString().slice(0, 10),
+        size: 'Generated on demand',
+        format: 'CSV',
+      })),
+    };
+  }
+
+  async generateReport(adminUserId: string, config: Record<string, unknown>) {
+    await this.logAudit(adminUserId, {
+      module: 'Reports',
+      action: 'Generate Report',
+      details: `Generated ${String(config.type || 'custom')} report`,
+      metadata: config as Prisma.InputJsonValue,
+    });
+    return { success: true, data: { generatedAt: new Date().toISOString() } };
+  }
+
   // ─── LIST PICKUPS (Admin) ───────────────────────
 
   async getPickups(query: PaginationDto) {
@@ -282,6 +621,14 @@ export class AdminService {
                   lastName: true,
                 },
               },
+            },
+          },
+          bin: {
+            select: {
+              id: true,
+              qrCode: true,
+              wasteType: true,
+              fillLevel: true,
             },
           },
         },
@@ -313,6 +660,7 @@ export class AdminService {
                 : null,
             }
           : null,
+        bin: p.bin,
         createdAt: p.createdAt,
       })),
       meta: {
@@ -429,6 +777,10 @@ export class AdminService {
         zone: c.zone,
         rating: c.rating,
         totalPickups: c.totalPickups,
+        licenseDocumentUrl: c.licenseDocumentUrl,
+        licenseDocumentKey: c.licenseDocumentKey,
+        idDocumentUrl: c.idDocumentUrl,
+        idDocumentKey: c.idDocumentKey,
         isAvailable: c.isAvailable,
         isApproved: c.isApproved,
         approvedAt: c.approvedAt,
@@ -619,6 +971,10 @@ export class AdminService {
         vehiclePlate: c.vehiclePlate,
         zone: c.zone,
         photoUrl: c.photoUrl,
+        licenseDocumentUrl: c.licenseDocumentUrl,
+        licenseDocumentKey: c.licenseDocumentKey,
+        idDocumentUrl: c.idDocumentUrl,
+        idDocumentKey: c.idDocumentKey,
         createdAt: c.createdAt,
         userCreatedAt: c.user.createdAt,
       })),
@@ -693,5 +1049,95 @@ export class AdminService {
         data: { id: collectorProfileId, isApproved: false },
       };
     }
+  }
+
+  private async logAudit(
+    actorId: string | undefined,
+    data: {
+      module: string;
+      action: string;
+      details?: string;
+      status?: AuditStatus;
+      metadata?: Prisma.InputJsonValue;
+    },
+  ) {
+    let actorName: string | undefined;
+    if (actorId) {
+      const actor = await this.prisma.user.findUnique({
+        where: { id: actorId },
+        select: { firstName: true, lastName: true, email: true, phone: true },
+      });
+      actorName =
+        `${actor?.firstName || ''} ${actor?.lastName || ''}`.trim() ||
+        actor?.email ||
+        actor?.phone ||
+        undefined;
+    }
+
+    return this.prisma.auditLog.create({
+      data: {
+        actorId,
+        actorName,
+        module: data.module,
+        action: data.action,
+        details: data.details,
+        status: data.status ?? AuditStatus.SUCCESS,
+        metadata: data.metadata,
+      },
+    });
+  }
+
+  private defaultSettings() {
+    return {
+      autoAssignment: { method: 'Nearest Collector', enabled: true },
+      timeSlots: {
+        morning: { start: '08:00', end: '10:00' },
+        midday: { start: '10:00', end: '12:00' },
+        afternoon: { start: '14:00', end: '16:00' },
+        evening: { start: '16:00', end: '18:00' },
+      },
+      ecoPoints: {
+        wastePoints: {
+          organic: 15,
+          recyclable: 20,
+          eWaste: 50,
+          glass: 10,
+          hazardous: 30,
+        },
+        tierMultipliers: [
+          { tier: 'eco_starter', label: 'Eco Starter', multiplier: 1.0 },
+          { tier: 'eco_warrior', label: 'Eco Warrior', multiplier: 1.25 },
+          { tier: 'eco_champion', label: 'Eco Champion', multiplier: 1.5 },
+        ],
+      },
+      serviceFees: {
+        residentialOrganic: 100,
+        residentialRecyclable: 150,
+        businessOrganic: 500,
+        businessEWaste: 1000,
+      },
+      notificationTemplates: [
+        {
+          id: 'pickup_scheduled',
+          name: 'Pickup Scheduled',
+          channel: 'SMS + Push + WhatsApp',
+        },
+        {
+          id: 'collector_en_route',
+          name: 'Collector En Route',
+          channel: 'Push + WhatsApp',
+        },
+        {
+          id: 'pickup_completed',
+          name: 'Pickup Completed',
+          channel: 'SMS + Push + WhatsApp',
+        },
+        {
+          id: 'smart_bin_full',
+          name: 'Smart Bin Full',
+          channel: 'Push + WhatsApp',
+        },
+      ],
+    };
   }
 }

@@ -80,23 +80,80 @@ enum BinStatus {
   INACTIVE
 }
 
+enum IotDeviceStatus {
+  ONLINE
+  OFFLINE
+  WARNING
+  MAINTENANCE
+}
+
+enum CommunicationChannel {
+  SMS
+  WHATSAPP
+  USSD
+  PUSH
+  IN_APP
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommunicationStatus {
+  RECEIVED
+  SENT
+  QUEUED
+  FAILED
+}
+
+enum RedemptionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SupportDisputeStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum SupportDisputePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
 // ─── MODELS ──────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid())
-  phone        String   @unique
-  email        String?  @unique
-  firstName    String?
-  lastName     String?
-  userType     UserType @default(RESIDENTIAL)
-  role         UserRole @default(USER)
-  referralCode String?  @unique
-  referredBy   String?
-  avatarUrl    String?
-  fcmToken     String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
+  id             String   @id @default(uuid())
+  phone          String   @unique
+  email          String?  @unique
+  firstName      String?  @map("first_name")
+  lastName       String?  @map("last_name")
+  userType       UserType @default(RESIDENTIAL) @map("user_type")
+  role           UserRole @default(USER)
+  referralCode   String?  @unique @map("referral_code")
+  referredBy     String?  @map("referred_by")
+  avatarUrl      String?  @map("avatar_url")
+  fcmToken       String?  @map("fcm_token")
+  defaultAddress String?  @map("default_address")
+  homeLatitude   Float?   @map("home_latitude")
+  homeLongitude  Float?   @map("home_longitude")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
   // Relations
   pickups          Pickup[]
@@ -104,8 +161,12 @@ model User {
   ecoPoints        EcoPointTransaction[]
   payments         Payment[]
   notifications    Notification[]
-  referredUsers    User[]             @relation("Referrals")
-  referrer         User?              @relation("Referrals", fields: [referredBy], references: [id])
+  iotDevices       IotDevice[]
+  redemptions      Redemption[]
+  supportDisputes  SupportDispute[]
+  auditLogs        AuditLog[]            @relation("AuditActor")
+  referredUsers    User[]                @relation("Referrals")
+  referrer         User?                 @relation("Referrals", fields: [referredBy], references: [id])
   collectorProfile CollectorProfile?
   refreshTokens    RefreshToken[]
 
@@ -114,11 +175,11 @@ model User {
 
 model RefreshToken {
   id        String   @id @default(uuid())
-  userId    String
+  userId    String   @map("user_id")
   token     String   @unique
-  expiresAt DateTime
+  expiresAt DateTime @map("expires_at")
   revoked   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -132,10 +193,10 @@ model OtpVerification {
   id        String   @id @default(uuid())
   phone     String
   otp       String
-  expiresAt DateTime
+  expiresAt DateTime @map("expires_at")
   verified  Boolean  @default(false)
   attempts  Int      @default(0)
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([phone, otp])
   @@index([phone, createdAt])
@@ -143,22 +204,27 @@ model OtpVerification {
 }
 
 model CollectorProfile {
-  id            String    @id @default(uuid())
-  userId        String    @unique
-  collectorName String?
-  vehiclePlate  String
-  zone          String
-  photoUrl      String?
-  rating        Float     @default(0.0)
-  totalPickups  Int       @default(0)
-  isAvailable   Boolean   @default(true)
-  isApproved    Boolean   @default(false)
-  approvedAt    DateTime?
-  approvedBy    String?
-  latitude      Float?
-  longitude     Float?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now()) @updatedAt
+  id                 String    @id @default(uuid())
+  userId             String    @unique @map("user_id")
+  collectorName      String?   @map("collector_name")
+  vehiclePlate       String    @map("vehicle_plate")
+  zone               String
+  zonePolygon        Json?     @map("zone_polygon")
+  photoUrl           String?   @map("photo_url")
+  licenseDocumentUrl String?   @map("license_document_url")
+  licenseDocumentKey String?   @map("license_document_key")
+  idDocumentUrl      String?   @map("id_document_url")
+  idDocumentKey      String?   @map("id_document_key")
+  rating             Float     @default(0.0)
+  totalPickups       Int       @default(0) @map("total_pickups")
+  isAvailable        Boolean   @default(true) @map("is_available")
+  isApproved         Boolean   @default(false) @map("is_approved")
+  approvedAt         DateTime? @map("approved_at")
+  approvedBy         String?   @map("approved_by")
+  latitude           Float?
+  longitude          Float?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
 
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -170,29 +236,29 @@ model CollectorProfile {
 model Pickup {
   id            String       @id @default(uuid())
   reference     String       @unique
-  userId        String
-  collectorId   String?
-  wasteType     WasteType
-  weightKg      Float?
-  scheduledDate DateTime
-  timeSlot      TimeSlot
+  userId        String       @map("user_id")
+  collectorId   String?      @map("collector_id")
+  wasteType     WasteType    @map("waste_type")
+  weightKg      Float?       @map("weight_kg")
+  scheduledDate DateTime     @map("scheduled_date")
+  timeSlot      TimeSlot     @map("time_slot")
   status        PickupStatus @default(PENDING)
   address       String
   latitude      Float
   longitude     Float
   notes         String?
-  completedAt   DateTime?
-  cancelledAt   DateTime?
-  cancelReason  String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @default(now()) @updatedAt
+  completedAt   DateTime?    @map("completed_at")
+  cancelledAt   DateTime?    @map("cancelled_at")
+  cancelReason  String?      @map("cancel_reason")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
 
   // Relations
   user      User              @relation(fields: [userId], references: [id])
   collector CollectorProfile? @relation(fields: [collectorId], references: [id])
   payment   Payment?
   bin       Bin?              @relation(fields: [binId], references: [id])
-  binId     String?
+  binId     String?           @map("bin_id")
 
   @@index([userId])
   @@index([collectorId])
@@ -204,34 +270,80 @@ model Pickup {
 
 model Bin {
   id          String    @id @default(uuid())
-  qrCode      String    @unique
-  userId      String
-  wasteType   WasteType
-  fillLevel   Int       @default(0)
+  qrCode      String    @unique @map("qr_code")
+  userId      String    @map("user_id")
+  wasteType   WasteType @map("waste_type")
+  fillLevel   Int       @default(0) @map("fill_level")
   status      BinStatus @default(ACTIVE)
   latitude    Float?
   longitude   Float?
-  lastEmptied DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
+  lastEmptied DateTime? @map("last_emptied")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
 
   // Relations
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pickups Pickup[]
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pickups        Pickup[]
+  iotDevice      IotDevice?
+  iotTelemetries IotTelemetry[]
 
   @@index([userId])
   @@index([qrCode])
   @@map("bins")
 }
 
+model IotDevice {
+  id           String          @id @default(uuid())
+  deviceId     String          @unique @map("device_id")
+  binId        String          @unique @map("bin_id")
+  userId       String          @map("user_id")
+  status       IotDeviceStatus @default(OFFLINE)
+  firmware     String?
+  batteryLevel Int?            @map("battery_level")
+  signalRssi   Float?          @map("signal_rssi")
+  lastSeenAt   DateTime?       @map("last_seen_at")
+  registeredAt DateTime        @default(now()) @map("registered_at")
+  updatedAt    DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  bin       Bin            @relation(fields: [binId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telemetry IotTelemetry[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([lastSeenAt])
+  @@map("iot_devices")
+}
+
+model IotTelemetry {
+  id           String   @id @default(uuid())
+  deviceId     String?  @map("device_id")
+  binId        String   @map("bin_id")
+  fillLevel    Int      @map("fill_level")
+  batteryLevel Int?     @map("battery_level")
+  signalRssi   Float?   @map("signal_rssi")
+  latitude     Float?
+  longitude    Float?
+  rawPayload   Json?    @map("raw_payload")
+  receivedAt   DateTime @default(now()) @map("received_at")
+
+  device IotDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  bin    Bin        @relation(fields: [binId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+  @@index([binId])
+  @@index([receivedAt])
+  @@map("iot_telemetry")
+}
+
 model EcoPointTransaction {
   id          String   @id @default(uuid())
-  userId      String
+  userId      String   @map("user_id")
   points      Int
   action      String
   description String?
-  pickupId    String?
-  createdAt   DateTime @default(now())
+  pickupId    String?  @map("pickup_id")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -244,23 +356,24 @@ model EcoPointTransaction {
 
 model Payment {
   id             String        @id @default(uuid())
-  pickupId       String        @unique
-  userId         String
+  pickupId       String        @unique @map("pickup_id")
+  userId         String        @map("user_id")
   amount         Float
   currency       String        @default("RWF")
   method         PaymentMethod
   status         PaymentStatus @default(PENDING)
-  transactionRef String?       @unique
-  externalRef    String?
-  paidAt         DateTime?
-  failedAt       DateTime?
-  failReason     String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @default(now()) @updatedAt
+  transactionRef String?       @unique @map("transaction_ref")
+  externalRef    String?       @map("external_ref")
+  paidAt         DateTime?     @map("paid_at")
+  failedAt       DateTime?     @map("failed_at")
+  failReason     String?       @map("fail_reason")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at")
 
   // Relations
-  pickup Pickup @relation(fields: [pickupId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+  pickup      Pickup              @relation(fields: [pickupId], references: [id])
+  user        User                @relation(fields: [userId], references: [id])
+  webhookLogs PaymentWebhookLog[]
 
   @@index([userId])
   @@index([status])
@@ -268,15 +381,34 @@ model Payment {
   @@map("payments")
 }
 
+model PaymentWebhookLog {
+  id             String         @id @default(uuid())
+  paymentId      String?        @map("payment_id")
+  provider       PaymentMethod
+  transactionRef String?        @map("transaction_ref")
+  externalRef    String?        @map("external_ref")
+  status         PaymentStatus?
+  payload        Json
+  receivedAt     DateTime       @default(now()) @map("received_at")
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([paymentId])
+  @@index([provider])
+  @@index([transactionRef])
+  @@index([receivedAt])
+  @@map("payment_webhook_logs")
+}
+
 model Notification {
   id     String           @id @default(uuid())
-  userId String
+  userId String           @map("user_id")
   type   NotificationType
   title  String
   body   String
   data   Json?
-  isRead Boolean          @default(false)
-  sentAt DateTime         @default(now())
+  isRead Boolean          @default(false) @map("is_read")
+  sentAt DateTime         @default(now()) @map("sent_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -284,4 +416,106 @@ model Notification {
   @@index([userId, isRead])
   @@index([sentAt])
   @@map("notifications")
+}
+
+model CommunicationLog {
+  id          String                 @id @default(uuid())
+  channel     CommunicationChannel
+  direction   CommunicationDirection
+  status      CommunicationStatus
+  phone       String?
+  userId      String?                @map("user_id")
+  subject     String?
+  message     String
+  metadata    Json?
+  providerRef String?                @map("provider_ref")
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  @@index([channel])
+  @@index([direction])
+  @@index([phone])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("communication_logs")
+}
+
+model Redemption {
+  id          String           @id @default(uuid())
+  userId      String           @map("user_id")
+  rewardId    String           @map("reward_id")
+  rewardLabel String           @map("reward_label")
+  points      Int
+  status      RedemptionStatus @default(PENDING)
+  provider    PaymentMethod?
+  providerRef String?          @map("provider_ref")
+  metadata    Json?
+  completedAt DateTime?        @map("completed_at")
+  failedAt    DateTime?        @map("failed_at")
+  failReason  String?          @map("fail_reason")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([rewardId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("redemptions")
+}
+
+model SupportDispute {
+  id          String                 @id @default(uuid())
+  userId      String?                @map("user_id")
+  pickupId    String?                @map("pickup_id")
+  paymentId   String?                @map("payment_id")
+  subject     String
+  description String
+  status      SupportDisputeStatus   @default(OPEN)
+  priority    SupportDisputePriority @default(MEDIUM)
+  assignedTo  String?                @map("assigned_to")
+  resolution  String?
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at")
+  resolvedAt  DateTime?              @map("resolved_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@map("support_disputes")
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  actorId   String?     @map("actor_id")
+  actorName String?     @map("actor_name")
+  module    String
+  action    String
+  details   String?
+  status    AuditStatus @default(SUCCESS)
+  metadata  Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([module])
+  @@index([status])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@map("system_settings")
 }

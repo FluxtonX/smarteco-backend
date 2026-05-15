@@ -76,10 +76,14 @@ export class FirebaseService implements OnModuleInit {
         notification: { title, body },
         data,
       });
-      this.logger.log(`Push notification sent successfully to ${token.substring(0, 10)}...`);
+      this.logger.log(
+        `Push notification sent successfully to ${token.substring(0, 10)}...`,
+      );
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send push notification: ${(error as Error).message}`);
+      this.logger.error(
+        `Failed to send push notification: ${(error as Error).message}`,
+      );
       return false;
     }
   }

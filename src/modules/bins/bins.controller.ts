@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -17,18 +18,23 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { BinsService } from './bins.service';
-import { ReportBinDto, UpdateFillLevelDto, ScanBinDto } from './dto';
+import {
+  ReportBinDto,
+  UpdateFillLevelDto,
+  ScanBinDto,
+  IotBinSyncDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { CurrentUser } from '../../common/decorators';
 
 @ApiTags('Bins')
 @Controller('bins')
-@UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class BinsController {
   constructor(private readonly binsService: BinsService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get all bins for current user',
     description:
@@ -58,6 +64,7 @@ export class BinsController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get single bin details',
     description:
@@ -74,6 +81,7 @@ export class BinsController {
   }
 
   @Post(':id/report')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Report a bin issue',
@@ -105,6 +113,7 @@ export class BinsController {
   }
 
   @Post(':id/fill-level')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Update bin fill level (IoT simulation)',
@@ -135,7 +144,35 @@ export class BinsController {
     return this.binsService.updateFillLevel(userId, binId, dto);
   }
 
+  @Patch(':id/fill-level')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Update bin fill level (mobile simulation compatibility)',
+    description:
+      'PATCH alias for mobile clients. Physical IoT devices should use POST /bins/iot/sync.',
+  })
+  async patchFillLevel(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) binId: string,
+    @Body() dto: UpdateFillLevelDto,
+  ) {
+    return this.binsService.updateFillLevel(userId, binId, dto);
+  }
+
+  @Post('iot/sync')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sync physical IoT bin telemetry',
+    description:
+      'Unauthenticated device endpoint protected by IOT_DEVICE_API_KEY. Updates fill level, optional location, and triggers bin alerts or auto-scheduled pickups.',
+  })
+  async syncIotBin(@Body() dto: IotBinSyncDto) {
+    return this.binsService.syncFromDevice(dto);
+  }
+
   @Post('scan')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Scan a bin QR code',
