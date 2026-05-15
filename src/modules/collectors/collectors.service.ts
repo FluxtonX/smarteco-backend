@@ -749,6 +749,12 @@ export class CollectorsService {
       );
     }
 
+    if (!dto.licenseDocumentUrl || !dto.idDocumentUrl) {
+      throw new BadRequestException(
+        'License and ID documents are required for collector registration.',
+      );
+    }
+
     // Mark user as COLLECTOR immediately, but keep access blocked until approved.
     const [collectorProfile] = await this.prisma.$transaction([
       this.prisma.collectorProfile.create({

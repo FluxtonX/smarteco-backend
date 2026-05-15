@@ -125,14 +125,36 @@ export class UsersService {
         defaultAddress: true,
         homeLatitude: true,
         homeLongitude: true,
+        createdAt: true,
+        collectorProfile: {
+          select: {
+            id: true,
+            isApproved: true,
+            collectorName: true,
+          },
+        },
       },
+    });
+
+    const totalPoints = await this.getTotalPoints(userId);
+    const tier = this.calculateTier(totalPoints);
+    const tierInfo = TIER_THRESHOLDS[tier];
+    const totalPickups = await this.prisma.pickup.count({
+      where: { userId, status: 'COMPLETED' },
     });
 
     await this.redis.del(`cache:user:profile:${userId}`);
     return {
       success: true,
       message: 'Profile updated successfully',
-      data: updatedUser,
+      data: {
+        ...updatedUser,
+        ecoPoints: totalPoints,
+        ecoTier: tier,
+        tierMultiplier: tierInfo.multiplier,
+        totalPickups,
+        memberSince: updatedUser.createdAt,
+      },
     };
   }
 
