@@ -2,7 +2,7 @@
 
 export const APP_NAME = 'SmartEco';
 export const API_PREFIX = 'api/v1';
-export const SWAGGER_PATH = 'api/docs';
+export const SWAGGER_PATH = '/api/docs';
 
 // ─── OTP ─────────────────────────────────────────
 
@@ -36,7 +36,8 @@ export const ECOPOINTS = {
 export const TIER_THRESHOLDS = {
   ECO_STARTER: { min: 0, max: 999, multiplier: 1.0 },
   ECO_WARRIOR: { min: 1000, max: 4999, multiplier: 1.25 },
-  ECO_CHAMPION: { min: 5000, max: Infinity, multiplier: 1.5 },
+  ECO_CHAMPION: { min: 5000, max: 9999, multiplier: 1.5 },
+  ECO_LEGEND: { min: 10000, max: Infinity, multiplier: 2.0 },
 };
 
 // ─── Pickup ──────────────────────────────────────

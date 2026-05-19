@@ -40,6 +40,13 @@ export class EcoPointsService {
         TIER_THRESHOLDS.ECO_CHAMPION.min - TIER_THRESHOLDS.ECO_WARRIOR.min;
       const progress = totalPoints - TIER_THRESHOLDS.ECO_WARRIOR.min;
       progressPercent = (progress / range) * 100;
+    } else if (tier === 'ECO_CHAMPION') {
+      nextTier = 'ECO_LEGEND';
+      pointsToNextTier = TIER_THRESHOLDS.ECO_LEGEND.min - totalPoints;
+      const range =
+        TIER_THRESHOLDS.ECO_LEGEND.min - TIER_THRESHOLDS.ECO_CHAMPION.min;
+      const progress = totalPoints - TIER_THRESHOLDS.ECO_CHAMPION.min;
+      progressPercent = (progress / range) * 100;
     }
 
     // Get pickup stats
@@ -285,6 +292,7 @@ export class EcoPointsService {
   }
 
   private calculateTier(points: number): keyof typeof TIER_THRESHOLDS {
+    if (points >= 10000) return 'ECO_LEGEND';
     if (points >= 5000) return 'ECO_CHAMPION';
     if (points >= 1000) return 'ECO_WARRIOR';
     return 'ECO_STARTER';

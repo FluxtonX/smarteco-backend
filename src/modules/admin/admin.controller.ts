@@ -251,6 +251,16 @@ export class AdminController {
     return this.adminService.updateUser(userId, dto);
   }
 
+  @Patch('users/:id/toggle-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Toggle user active status',
+  })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  async toggleUserStatus(@Param('id', ParseUUIDPipe) userId: string) {
+    return this.adminService.toggleUserStatus(userId);
+  }
+
   @Get('pickups')
   @ApiOperation({
     summary: 'List all pickups',
