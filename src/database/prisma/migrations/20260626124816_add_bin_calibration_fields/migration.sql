@@ -1,0 +1,30 @@
+-- AlterTable
+ALTER TABLE "bins" ADD COLUMN     "empty_height_mm" INTEGER NOT NULL DEFAULT 1200,
+ADD COLUMN     "full_height_mm" INTEGER NOT NULL DEFAULT 200,
+ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "collector_profiles" ALTER COLUMN "rating" SET DEFAULT 0.0,
+ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "iot_devices" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "payments" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "pickups" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "redemptions" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "support_disputes" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "system_settings" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "users" ALTER COLUMN "referral_code" DROP NOT NULL,
+ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
