@@ -16,13 +16,7 @@ import {
 } from './dto';
 import { EcoPointsService } from '../eco-points/eco-points.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import {
-  PickupStatus,
-  BinStatus,
-  Prisma,
-  NotificationType,
-  UserRole,
-} from '@prisma/client';
+import { PickupStatus, BinStatus, Prisma, UserRole } from '@prisma/client';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
 import { RouteOptimizerService } from './route-optimizer.service';
 import { S3StorageService } from '../../integrations/storage';

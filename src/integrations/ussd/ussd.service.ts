@@ -11,12 +11,6 @@ import {
 } from '@prisma/client';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 
-// USSD session state
-interface UssdSession {
-  step: string;
-  data: Record<string, any>;
-}
-
 @Injectable()
 export class UssdService {
   private readonly logger = new Logger(UssdService.name);

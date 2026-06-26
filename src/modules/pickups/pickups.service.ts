@@ -404,7 +404,7 @@ export class PickupsService {
       PickupStatus.IN_PROGRESS,
     ];
 
-    let pickup = await this.prisma.pickup.findFirst({
+    const pickup = await this.prisma.pickup.findFirst({
       where: {
         userId,
         status: { in: activeStatuses },

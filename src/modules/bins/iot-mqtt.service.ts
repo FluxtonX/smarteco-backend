@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
 import { BinsService } from './bins.service';
@@ -14,8 +19,14 @@ export class IotMqttService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    const brokerUrl = this.configService.get<string>('MQTT_BROKER_URL', 'mqtt://localhost:1883');
-    const topic = this.configService.get<string>('MQTT_SUBSCRIBE_TOPIC', 'smarteco/iot/up');
+    const brokerUrl = this.configService.get<string>(
+      'MQTT_BROKER_URL',
+      'mqtt://localhost:1883',
+    );
+    const topic = this.configService.get<string>(
+      'MQTT_SUBSCRIBE_TOPIC',
+      'smarteco/iot/up',
+    );
     const username = this.configService.get<string>('MQTT_USERNAME');
     const password = this.configService.get<string>('MQTT_PASSWORD');
 
@@ -31,10 +42,14 @@ export class IotMqttService implements OnModuleInit, OnModuleDestroy {
     this.mqttClient = mqtt.connect(brokerUrl, options);
 
     this.mqttClient.on('connect', () => {
-      this.logger.log(`Connected to MQTT Broker. Subscribing to topic: ${topic}`);
+      this.logger.log(
+        `Connected to MQTT Broker. Subscribing to topic: ${topic}`,
+      );
       this.mqttClient.subscribe(topic, (err) => {
         if (err) {
-          this.logger.error(`Failed to subscribe to topic ${topic}: ${err.message}`);
+          this.logger.error(
+            `Failed to subscribe to topic ${topic}: ${err.message}`,
+          );
         } else {
           this.logger.log(`Successfully subscribed to topic: ${topic}`);
         }
@@ -45,15 +60,21 @@ export class IotMqttService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`MQTT client error: ${err.message}`);
     });
 
-    this.mqttClient.on('message', async (recvTopic, message) => {
+    this.mqttClient.on('message', (recvTopic, message) => {
+      const payloadString = message.toString();
+      this.logger.debug(
+        `Received MQTT payload on topic ${recvTopic}: ${payloadString}`,
+      );
+
       try {
-        const payloadString = message.toString();
-        this.logger.debug(`Received MQTT payload on topic ${recvTopic}: ${payloadString}`);
-        
-        const payload = JSON.parse(payloadString);
-        await this.binsService.processLoraUplink(payload);
-      } catch (err) {
-        this.logger.error(`Error processing MQTT message: ${err.message}`);
+        const payload = JSON.parse(payloadString) as Record<string, unknown>;
+        this.binsService.processLoraUplink(payload).catch((err: unknown) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Error processing MQTT message: ${errMsg}`);
+        });
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Error parsing MQTT message: ${errMsg}`);
       }
     });
   }

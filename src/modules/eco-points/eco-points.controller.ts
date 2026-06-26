@@ -114,6 +114,7 @@ export class EcoPointsController {
   })
   @ApiResponse({ status: 200, description: 'Reward catalog retrieved' })
   async getRewards() {
+    await Promise.resolve();
     return this.ecoPointsService.getRewardCatalog();
   }
 

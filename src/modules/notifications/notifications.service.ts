@@ -190,7 +190,11 @@ export class NotificationsService {
           ? Object.fromEntries(
               Object.entries(data as Record<string, unknown>).map(([k, v]) => [
                 k,
-                v == null ? '' : String(v),
+                v == null
+                  ? ''
+                  : typeof v === 'object'
+                    ? JSON.stringify(v)
+                    : String(v as string | number | boolean),
               ]),
             )
           : undefined;
