@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   UnauthorizedException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -527,6 +528,169 @@ export class BinsService {
         },
       },
     };
+  }
+
+  // ─── LORAWAN INGESTION ───────────────────────────
+
+  async processLoraUplink(body: any, authHeader?: string) {
+    // 1. Authenticate Request (Only for HTTP fallback where authHeader is passed)
+    if (authHeader) {
+      const configuredKey = this.configService.get<string>('IOT_DEVICE_API_KEY');
+      if (configuredKey) {
+        const expectedAuth = `Bearer ${configuredKey}`;
+        if (authHeader !== expectedAuth) {
+          throw new UnauthorizedException('Invalid LoRaWAN gateway auth token');
+        }
+      }
+    }
+
+    // 2. Extract Device DevEUI & Decoded Payload
+    const devEui = body.devEUI || body.devEui || body.deviceInfo?.devEui;
+    if (!devEui) {
+      throw new BadRequestException('Missing devEUI in request body');
+    }
+    const deviceId = devEui.toLowerCase();
+
+    const decoded = body.object || body.decoded || {};
+    if (decoded.distance === undefined) {
+      return { success: false, message: 'No distance value reported in codec object. Skipping.' };
+    }
+
+    // 3. Find Device and Associated Bin
+    const device = await this.prisma.iotDevice.findUnique({
+      where: { deviceId },
+      include: { bin: true },
+    });
+
+    if (!device || !device.bin) {
+      this.logger.warn(`Uplink received from unlinked LoRaWAN device: ${deviceId}`);
+      throw new NotFoundException(`No device or linked bin found for EUI ${deviceId}`);
+    }
+
+    const bin = device.bin;
+
+    // 4. Calculate Fill Level Percentage from Distance (mm)
+    // fill% = (emptyHeight - distance) / (emptyHeight - fullHeight) * 100
+    const emptyHeight = bin.emptyHeightMm;
+    const fullHeight = bin.fullHeightMm;
+    const distance = decoded.distance; // in mm
+
+    let fillLevel = 0;
+    if (emptyHeight > fullHeight) {
+      const rawFill = ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
+      fillLevel = Math.max(0, Math.min(100, Math.round(rawFill)));
+    } else {
+      this.logger.error(`Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`);
+    }
+
+    // 5. Update Database States
+    const isTilt = decoded.position === 1 || !!decoded.tilt;
+    
+    let newStatus = bin.status;
+    if (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
+      newStatus = BinStatus.FULL;
+    } else if (fillLevel < BIN_ALERT_THRESHOLD) {
+      newStatus = BinStatus.ACTIVE;
+    }
+
+    const rxInfo = Array.isArray(body.rxInfo) ? body.rxInfo[0] : null;
+    const signalRssi = rxInfo ? rxInfo.rssi : (body.rssi ?? null);
+
+    // Update bin fill percentage
+    await this.prisma.bin.update({
+      where: { id: bin.id },
+      data: {
+        fillLevel,
+        status: newStatus,
+        latitude: decoded.latitude ?? bin.latitude,
+        longitude: decoded.longitude ?? bin.longitude,
+      },
+    });
+
+    // Update physical device connectivity parameters
+    await this.prisma.iotDevice.update({
+      where: { id: device.id },
+      data: {
+        status: isTilt 
+          ? IotDeviceStatus.WARNING 
+          : (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD ? IotDeviceStatus.WARNING : IotDeviceStatus.ONLINE),
+        batteryLevel: decoded.battery ?? device.batteryLevel,
+        signalRssi: signalRssi ?? device.signalRssi,
+        lastSeenAt: new Date(),
+      },
+    });
+
+    // Create telemetry log
+    await this.prisma.iotTelemetry.create({
+      data: {
+        deviceId: device.id,
+        binId: bin.id,
+        fillLevel,
+        batteryLevel: decoded.battery ?? null,
+        signalRssi: signalRssi ?? null,
+        latitude: decoded.latitude ?? null,
+        longitude: decoded.longitude ?? null,
+        rawPayload: body as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    // 6. Reuse Existing Alerting / Auto-Scheduling Logic
+    const alertTriggered = bin.fillLevel < BIN_ALERT_THRESHOLD && fillLevel >= BIN_ALERT_THRESHOLD;
+    const autoScheduled = bin.fillLevel < BIN_AUTO_SCHEDULE_THRESHOLD && fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD;
+
+    if (alertTriggered && !autoScheduled) {
+      await this.notificationsService.createNotification(
+        bin.userId,
+        'Bin Nearly Full',
+        `Your ${bin.wasteType} bin (${bin.qrCode}) is now ${fillLevel}% full.`,
+        NotificationType.PUSH,
+        { binId: bin.id, qrCode: bin.qrCode, fillLevel },
+      );
+    }
+
+    if (autoScheduled) {
+      const existingPickup = await this.prisma.pickup.findFirst({
+        where: {
+          binId: bin.id,
+          status: { in: [PickupStatus.PENDING, PickupStatus.CONFIRMED, PickupStatus.COLLECTOR_ASSIGNED] },
+        },
+      });
+
+      if (!existingPickup) {
+        const reference = await this.generateUniqueReference();
+        const recentPickup = await this.prisma.pickup.findFirst({
+          where: { userId: bin.userId },
+          orderBy: { createdAt: 'desc' },
+          select: { address: true, latitude: true, longitude: true },
+        });
+
+        await this.prisma.pickup.create({
+          data: {
+            reference,
+            userId: bin.userId,
+            wasteType: bin.wasteType,
+            scheduledDate: this.getNextAvailableDate(),
+            timeSlot: 'MORNING_8_10',
+            status: PickupStatus.PENDING,
+            address: recentPickup?.address || 'IoT bin location',
+            latitude: decoded.latitude ?? recentPickup?.latitude ?? bin.latitude ?? 0,
+            longitude: decoded.longitude ?? recentPickup?.longitude ?? bin.longitude ?? 0,
+            notes: `Auto-scheduled: Bin ${bin.qrCode} fill level at ${fillLevel}% (LoRaWAN)`,
+            binId: bin.id,
+          },
+        });
+        
+        await this.notificationsService.createNotification(
+          bin.userId,
+          'Auto Pickup Scheduled',
+          `Your ${bin.wasteType} bin (${bin.qrCode}) reached ${fillLevel}%. Pickup ${reference} was scheduled automatically.`,
+          NotificationType.PUSH,
+          { binId: bin.id, qrCode: bin.qrCode, fillLevel, pickupReference: reference },
+        );
+      }
+    }
+
+    return { success: true, fillLevel, alertTriggered, autoScheduled };
   }
 
   // ─── PRIVATE HELPERS ────────────────────────────

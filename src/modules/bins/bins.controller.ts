@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  Headers,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -169,6 +170,19 @@ export class BinsController {
   })
   async syncIotBin(@Body() dto: IotBinSyncDto) {
     return this.binsService.syncFromDevice(dto);
+  }
+
+  @Post('iot/lorawan/uplink')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sync LoRaWAN IoT bin telemetry (HTTP fallback)',
+    description: 'HTTP endpoint option for LoRaWAN gateway integration.',
+  })
+  async receiveLoraUplink(
+    @Body() body: any,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    return this.binsService.processLoraUplink(body, authHeader);
   }
 
   @Post('scan')

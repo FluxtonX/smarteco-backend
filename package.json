@@ -46,6 +46,7 @@
     "firebase-admin": "^13.8.0",
     "ioredis": "^5.9.3",
     "joi": "^18.0.2",
+    "mqtt": "^5.15.1",
     "nanoid": "^5.1.6",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
