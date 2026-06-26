@@ -16,11 +16,11 @@ import { PaginationDto } from '../../common/dto';
 import {
   AuditStatus,
   CommunicationChannel,
-  IotDeviceStatus,
   NotificationType,
   Prisma,
   SupportDisputeStatus,
   UserRole,
+  SupportDisputePriority,
 } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
@@ -421,7 +421,7 @@ export class AdminService {
     adminUserId: string,
     dto: {
       status?: SupportDisputeStatus;
-      priority?: any;
+      priority?: SupportDisputePriority;
       assignedTo?: string;
       resolution?: string;
     },
@@ -555,6 +555,7 @@ export class AdminService {
   }
 
   async getReportTemplates() {
+    await Promise.resolve();
     return {
       success: true,
       data: [
@@ -590,7 +591,7 @@ export class AdminService {
     await this.logAudit(adminUserId, {
       module: 'Reports',
       action: 'Generate Report',
-      details: `Generated ${String(config.type || 'custom')} report`,
+      details: `Generated ${(config.type as string) || 'custom'} report`,
       metadata: config as Prisma.InputJsonValue,
     });
     return { success: true, data: { generatedAt: new Date().toISOString() } };

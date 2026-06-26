@@ -532,10 +532,11 @@ export class BinsService {
 
   // ─── LORAWAN INGESTION ───────────────────────────
 
-  async processLoraUplink(body: any, authHeader?: string) {
+  async processLoraUplink(body: unknown, authHeader?: string) {
     // 1. Authenticate Request (Only for HTTP fallback where authHeader is passed)
     if (authHeader) {
-      const configuredKey = this.configService.get<string>('IOT_DEVICE_API_KEY');
+      const configuredKey =
+        this.configService.get<string>('IOT_DEVICE_API_KEY');
       if (configuredKey) {
         const expectedAuth = `Bearer ${configuredKey}`;
         if (authHeader !== expectedAuth) {
@@ -544,16 +545,54 @@ export class BinsService {
       }
     }
 
+    interface LoraUplinkPayload {
+      devEUI?: string;
+      devEui?: string;
+      deviceInfo?: {
+        devEui?: string;
+      };
+      object?: {
+        distance?: number;
+        battery?: number;
+        temperature?: number;
+        position?: number;
+        tilt?: boolean;
+        latitude?: number;
+        longitude?: number;
+      };
+      decoded?: {
+        distance?: number;
+        battery?: number;
+        temperature?: number;
+        position?: number;
+        tilt?: boolean;
+        latitude?: number;
+        longitude?: number;
+      };
+      rxInfo?: Array<{
+        rssi?: number;
+        loRaSNR?: number;
+        snr?: number;
+      }>;
+      rssi?: number;
+    }
+
+    const payload = body as LoraUplinkPayload;
+
     // 2. Extract Device DevEUI & Decoded Payload
-    const devEui = body.devEUI || body.devEui || body.deviceInfo?.devEui;
+    const devEui =
+      payload.devEUI || payload.devEui || payload.deviceInfo?.devEui;
     if (!devEui) {
       throw new BadRequestException('Missing devEUI in request body');
     }
     const deviceId = devEui.toLowerCase();
 
-    const decoded = body.object || body.decoded || {};
+    const decoded = payload.object || payload.decoded || {};
     if (decoded.distance === undefined) {
-      return { success: false, message: 'No distance value reported in codec object. Skipping.' };
+      return {
+        success: false,
+        message: 'No distance value reported in codec object. Skipping.',
+      };
     }
 
     // 3. Find Device and Associated Bin
@@ -563,8 +602,12 @@ export class BinsService {
     });
 
     if (!device || !device.bin) {
-      this.logger.warn(`Uplink received from unlinked LoRaWAN device: ${deviceId}`);
-      throw new NotFoundException(`No device or linked bin found for EUI ${deviceId}`);
+      this.logger.warn(
+        `Uplink received from unlinked LoRaWAN device: ${deviceId}`,
+      );
+      throw new NotFoundException(
+        `No device or linked bin found for EUI ${deviceId}`,
+      );
     }
 
     const bin = device.bin;
@@ -577,15 +620,18 @@ export class BinsService {
 
     let fillLevel = 0;
     if (emptyHeight > fullHeight) {
-      const rawFill = ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
+      const rawFill =
+        ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
       fillLevel = Math.max(0, Math.min(100, Math.round(rawFill)));
     } else {
-      this.logger.error(`Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`);
+      this.logger.error(
+        `Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`,
+      );
     }
 
     // 5. Update Database States
     const isTilt = decoded.position === 1 || !!decoded.tilt;
-    
+
     let newStatus = bin.status;
     if (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
       newStatus = BinStatus.FULL;
@@ -593,8 +639,8 @@ export class BinsService {
       newStatus = BinStatus.ACTIVE;
     }
 
-    const rxInfo = Array.isArray(body.rxInfo) ? body.rxInfo[0] : null;
-    const signalRssi = rxInfo ? rxInfo.rssi : (body.rssi ?? null);
+    const rxInfo = Array.isArray(payload.rxInfo) ? payload.rxInfo[0] : null;
+    const signalRssi = rxInfo ? rxInfo.rssi : (payload.rssi ?? null);
 
     // Update bin fill percentage
     await this.prisma.bin.update({
@@ -611,9 +657,11 @@ export class BinsService {
     await this.prisma.iotDevice.update({
       where: { id: device.id },
       data: {
-        status: isTilt 
-          ? IotDeviceStatus.WARNING 
-          : (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD ? IotDeviceStatus.WARNING : IotDeviceStatus.ONLINE),
+        status: isTilt
+          ? IotDeviceStatus.WARNING
+          : fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD
+            ? IotDeviceStatus.WARNING
+            : IotDeviceStatus.ONLINE,
         batteryLevel: decoded.battery ?? device.batteryLevel,
         signalRssi: signalRssi ?? device.signalRssi,
         lastSeenAt: new Date(),
@@ -630,13 +678,16 @@ export class BinsService {
         signalRssi: signalRssi ?? null,
         latitude: decoded.latitude ?? null,
         longitude: decoded.longitude ?? null,
-        rawPayload: body as unknown as Prisma.InputJsonValue,
+        rawPayload: body as Prisma.InputJsonValue,
       },
     });
 
     // 6. Reuse Existing Alerting / Auto-Scheduling Logic
-    const alertTriggered = bin.fillLevel < BIN_ALERT_THRESHOLD && fillLevel >= BIN_ALERT_THRESHOLD;
-    const autoScheduled = bin.fillLevel < BIN_AUTO_SCHEDULE_THRESHOLD && fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD;
+    const alertTriggered =
+      bin.fillLevel < BIN_ALERT_THRESHOLD && fillLevel >= BIN_ALERT_THRESHOLD;
+    const autoScheduled =
+      bin.fillLevel < BIN_AUTO_SCHEDULE_THRESHOLD &&
+      fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD;
 
     if (alertTriggered && !autoScheduled) {
       await this.notificationsService.createNotification(
@@ -652,7 +703,13 @@ export class BinsService {
       const existingPickup = await this.prisma.pickup.findFirst({
         where: {
           binId: bin.id,
-          status: { in: [PickupStatus.PENDING, PickupStatus.CONFIRMED, PickupStatus.COLLECTOR_ASSIGNED] },
+          status: {
+            in: [
+              PickupStatus.PENDING,
+              PickupStatus.CONFIRMED,
+              PickupStatus.COLLECTOR_ASSIGNED,
+            ],
+          },
         },
       });
 
@@ -673,19 +730,29 @@ export class BinsService {
             timeSlot: 'MORNING_8_10',
             status: PickupStatus.PENDING,
             address: recentPickup?.address || 'IoT bin location',
-            latitude: decoded.latitude ?? recentPickup?.latitude ?? bin.latitude ?? 0,
-            longitude: decoded.longitude ?? recentPickup?.longitude ?? bin.longitude ?? 0,
+            latitude:
+              decoded.latitude ?? recentPickup?.latitude ?? bin.latitude ?? 0,
+            longitude:
+              decoded.longitude ??
+              recentPickup?.longitude ??
+              bin.longitude ??
+              0,
             notes: `Auto-scheduled: Bin ${bin.qrCode} fill level at ${fillLevel}% (LoRaWAN)`,
             binId: bin.id,
           },
         });
-        
+
         await this.notificationsService.createNotification(
           bin.userId,
           'Auto Pickup Scheduled',
           `Your ${bin.wasteType} bin (${bin.qrCode}) reached ${fillLevel}%. Pickup ${reference} was scheduled automatically.`,
           NotificationType.PUSH,
-          { binId: bin.id, qrCode: bin.qrCode, fillLevel, pickupReference: reference },
+          {
+            binId: bin.id,
+            qrCode: bin.qrCode,
+            fillLevel,
+            pickupReference: reference,
+          },
         );
       }
     }

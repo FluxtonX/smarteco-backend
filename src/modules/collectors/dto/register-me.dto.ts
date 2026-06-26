@@ -3,7 +3,6 @@ import {
   IsIn,
   IsNotEmpty,
   IsNumber,
-  IsObject,
   IsOptional,
   IsString,
   IsUrl,

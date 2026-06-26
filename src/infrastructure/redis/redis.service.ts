@@ -18,6 +18,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async get<T = unknown>(key: string): Promise<T | null> {
+    await Promise.resolve();
     try {
       const entry = this.store.get(key);
       if (!entry) return null;
@@ -42,6 +43,7 @@ export class RedisService implements OnModuleDestroy {
     value: unknown,
     ttlSeconds?: number,
   ): Promise<boolean> {
+    await Promise.resolve();
     try {
       const payload = JSON.stringify(value);
       const expiry =
@@ -58,6 +60,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async del(key: string): Promise<void> {
+    await Promise.resolve();
     try {
       this.store.delete(key);
     } catch (e) {
@@ -68,6 +71,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async delByPrefix(prefix: string): Promise<void> {
+    await Promise.resolve();
     try {
       for (const key of this.store.keys()) {
         if (key.startsWith(prefix)) {
@@ -82,6 +86,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
+    await Promise.resolve();
     this.store.clear();
   }
 }

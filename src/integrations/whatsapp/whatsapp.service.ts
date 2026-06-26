@@ -7,6 +7,7 @@ import {
   CommunicationChannel,
   CommunicationDirection,
   CommunicationStatus,
+  Prisma,
 } from '@prisma/client';
 
 interface TwilioMessageResponse {
@@ -552,7 +553,7 @@ export class WhatsAppService {
         subject: 'WhatsApp',
         message: message || '<template>',
         providerRef,
-        metadata: metadata as any,
+        metadata: metadata as Prisma.InputJsonValue,
       },
     });
   }
