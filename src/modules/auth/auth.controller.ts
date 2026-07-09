@@ -19,6 +19,7 @@ import {
   RefreshTokenDto,
   GoogleLoginDto,
   AdminLoginDto,
+  DeleteRequestDto,
 } from './dto';
 import { JwtAuthGuard } from './guards';
 import { CurrentUser } from '../../common/decorators';
@@ -181,4 +182,19 @@ export class AuthController {
   async adminLogin(@Body() dto: AdminLoginDto) {
     return this.authService.adminLogin(dto);
   }
+
+  @Post('delete-request')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Request Account Deletion',
+    description: 'Public endpoint to submit an account deletion request for manual support processing.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Deletion request received successfully',
+  })
+  async requestDelete(@Body() dto: DeleteRequestDto) {
+    return this.authService.requestDelete(dto);
+  }
 }
+

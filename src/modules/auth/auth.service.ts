@@ -15,6 +15,7 @@ import {
   RefreshTokenDto,
   GoogleLoginDto,
   AdminLoginDto,
+  DeleteRequestDto,
 } from './dto';
 import { FirebaseService } from '../../integrations/firebase/firebase.service';
 import * as admin from 'firebase-admin';
@@ -29,6 +30,8 @@ import {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly mockPhoneNumber: string;
+  private readonly mockOtp: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -36,7 +39,13 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly twilioService: TwilioService,
     private readonly firebaseService: FirebaseService,
-  ) {}
+  ) {
+    this.mockPhoneNumber =
+      this.configService.get<string>('app.mockAuth.phoneNumber') ||
+      '+1234567890';
+    this.mockOtp =
+      this.configService.get<string>('app.mockAuth.otp') || '123456';
+  }
 
   // ─── SEND OTP ────────────────────────────────────
 
@@ -49,16 +58,33 @@ export class AuthService {
     });
 
     // ─── Existence Checks ─────────────────────────────
-    if (isLogin === true && !existingUser) {
-      throw new BadRequestException(
-        'User not found. Please create an account.',
-      );
+    if (phone !== this.mockPhoneNumber) {
+      if (isLogin === true && !existingUser) {
+        throw new BadRequestException(
+          'User not found. Please create an account.',
+        );
+      }
+
+      if (isLogin === false && existingUser) {
+        throw new BadRequestException(
+          'User already exists. Please log in instead.',
+        );
+      }
     }
 
-    if (isLogin === false && existingUser) {
-      throw new BadRequestException(
-        'User already exists. Please log in instead.',
+    // Skip Twilio for the mock phone number
+    if (phone === this.mockPhoneNumber) {
+      this.logger.log(
+        `Skipping Twilio OTP send for mock phone number: ${phone}`,
       );
+      return {
+        success: true,
+        message: 'OTP sent successfully',
+        data: {
+          expiresIn: 600, // Twilio Verify default: 10 minutes
+          isNewUser: !existingUser,
+        },
+      };
     }
 
     // Send OTP via Twilio Verify (handles code gen, expiry, rate‑limiting)
@@ -94,15 +120,22 @@ export class AuthService {
 
     // Verify OTP via Twilio Verify
     let verification: { valid: boolean; status: string };
-    try {
-      verification = await this.twilioService.checkVerification(phone, otp);
-    } catch (error) {
-      this.logger.error(
-        `Twilio checkVerification failed: ${(error as Error).message}`,
+    if (phone === this.mockPhoneNumber && otp === this.mockOtp) {
+      this.logger.log(
+        `Bypassing Twilio OTP verification for mock phone number: ${phone}`,
       );
-      throw new BadRequestException(
-        'Verification failed. Please request a new OTP.',
-      );
+      verification = { valid: true, status: 'approved' };
+    } else {
+      try {
+        verification = await this.twilioService.checkVerification(phone, otp);
+      } catch (error) {
+        this.logger.error(
+          `Twilio checkVerification failed: ${(error as Error).message}`,
+        );
+        throw new BadRequestException(
+          'Verification failed. Please request a new OTP.',
+        );
+      }
     }
 
     if (!verification.valid) {
@@ -638,4 +671,37 @@ export class AuthService {
 
     this.logger.log(`Created ${BINS_PER_USER} default bins for user ${userId}`);
   }
+
+  async requestDelete(dto: DeleteRequestDto) {
+    const { phone, email, firstName, lastName, reason } = dto;
+
+    // Search if the user exists
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone },
+          ...(email ? [{ email }] : []),
+        ],
+      },
+    });
+
+    // Create a support dispute (ticket) in the DB
+    await this.prisma.supportDispute.create({
+      data: {
+        userId: user ? user.id : null,
+        subject: 'Account Deletion Request',
+        description: `Delete request submitted from website.\nName: ${firstName} ${lastName}\nPhone: ${phone}\nEmail: ${email || 'Not provided'}\nReason: ${reason || 'Not provided'}`,
+        status: 'OPEN',
+        priority: 'HIGH',
+      },
+    });
+
+    this.logger.log(`Account deletion request received for: ${phone} / ${email || 'no-email'}`);
+
+    return {
+      success: true,
+      message: 'Your deletion request has been received. Our support team will process it after verifying your identity.',
+    };
+  }
 }
+

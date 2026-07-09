@@ -27,6 +27,7 @@ import {
   CreateCollectorDto,
   AssignCollectorDto,
   ApproveCollectorDto,
+  UpdateBinAdminDto,
 } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
@@ -116,8 +117,28 @@ export class AdminController {
   }
 
   @Get('bins')
+  @ApiOperation({
+    summary: 'Get all user bins',
+    description: 'Get list of all registered waste bins with their telemetry and status.',
+  })
   async getBins() {
     return this.adminService.getBins();
+  }
+
+  @Patch('bins/:id')
+  @ApiOperation({
+    summary: 'Update bin details and link IoT device EUI',
+    description:
+      'Allows admin to update bin properties (status, heights, location, wasteType) and assign/re-assign an IoT physical device DevEUI.',
+  })
+  @ApiParam({ name: 'id', description: 'Bin UUID' })
+  @ApiResponse({ status: 200, description: 'Bin updated successfully' })
+  @ApiResponse({ status: 404, description: 'Bin not found' })
+  async updateBin(
+    @Param('id', ParseUUIDPipe) binId: string,
+    @Body() dto: UpdateBinAdminDto,
+  ) {
+    return this.adminService.updateBin(binId, dto);
   }
 
   @Get('analytics/bins')

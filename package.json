@@ -21,7 +21,8 @@
     "studio": "npx prisma studio",
     "db:push": "npx prisma db push --force-reset",
     "db:reset": "npx prisma migrate reset --force",
-    "create-admin": "node scripts/create-admin.js"
+    "create-admin": "node scripts/create-admin.js",
+    "create-test-user": "node scripts/create-test-user.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",
