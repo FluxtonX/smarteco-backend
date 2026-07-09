@@ -72,4 +72,8 @@ export const validationSchema = Joi.object({
   AWS_SECRET_ACCESS_KEY: Joi.string().allow('').optional(),
   AWS_S3_BUCKET: Joi.string().allow('').optional(),
   AWS_S3_PUBLIC_BASE_URL: Joi.string().allow('').optional(),
+
+  // Sandbox / Play Store Mock Auth
+  MOCK_PHONE_NUMBER: Joi.string().allow('').optional(),
+  MOCK_OTP: Joi.string().allow('').optional(),
 });

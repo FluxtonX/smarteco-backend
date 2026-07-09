@@ -61,13 +61,14 @@ export const MAX_COLLECTOR_ASSIGNMENT_DISTANCE_KM = 25;
 export const BIN_QR_PREFIX = 'BIN-';
 export const BIN_ALERT_THRESHOLD = 80; // percentage
 export const BIN_AUTO_SCHEDULE_THRESHOLD = 95; // percentage
-export const BINS_PER_USER = 5;
+export const BINS_PER_USER = 6;
 
 export const BIN_WASTE_TYPES = [
   'ORGANIC',
   'RECYCLABLE',
   'EWASTE',
   'GENERAL',
+  'GLASS',
   'HAZARDOUS',
 ] as const;
 

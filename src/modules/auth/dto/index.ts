@@ -3,3 +3,4 @@ export * from './verify-otp.dto';
 export * from './refresh-token.dto';
 export * from './google-login.dto';
 export * from './admin-login.dto';
+export * from './delete-request.dto';

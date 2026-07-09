@@ -65,4 +65,10 @@ export default registerAs('app', () => ({
   googleMaps: {
     apiKey: process.env.GOOGLE_MAPS_API_KEY,
   },
+
+  // Sandbox / Play Store Mock Auth
+  mockAuth: {
+    phoneNumber: process.env.MOCK_PHONE_NUMBER || '+1234567890',
+    otp: process.env.MOCK_OTP || '123456',
+  },
 }));

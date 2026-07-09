@@ -11,6 +11,7 @@ import {
   CreateCollectorDto,
   AssignCollectorDto,
   ApproveCollectorDto,
+  UpdateBinAdminDto,
 } from './dto';
 import { PaginationDto } from '../../common/dto';
 import {
@@ -315,6 +316,73 @@ export class AdminService {
         },
         telemetry: bin.iotTelemetries.reverse(),
       })),
+    };
+  }
+
+  async updateBin(binId: string, dto: UpdateBinAdminDto) {
+    const bin = await this.prisma.bin.findUnique({
+      where: { id: binId },
+      include: { iotDevice: true },
+    });
+
+    if (!bin) {
+      throw new NotFoundException('Bin not found.');
+    }
+
+    const { deviceId, ...binFields } = dto;
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Handle device mapping if deviceId is passed
+      if (deviceId !== undefined) {
+        if (!deviceId) {
+          // If empty string or null is passed, unlink/delete existing device for this bin
+          await tx.iotDevice.deleteMany({
+            where: { binId },
+          });
+        } else {
+          const deviceIdLower = deviceId.toLowerCase();
+
+          // Delete any existing device mapping on this bin to prevent unique constraint conflicts
+          await tx.iotDevice.deleteMany({
+            where: { binId },
+          });
+
+          // Create/link the physical sensor device
+          await tx.iotDevice.upsert({
+            where: { deviceId: deviceIdLower },
+            update: {
+              binId,
+              userId: bin.userId,
+            },
+            create: {
+              deviceId: deviceIdLower,
+              binId,
+              userId: bin.userId,
+              status: 'ONLINE',
+            },
+          });
+        }
+      }
+
+      // 2. Update bin fields
+      await tx.bin.update({
+        where: { id: binId },
+        data: binFields,
+      });
+    });
+
+    // Invalidate dashboard stats cache
+    await this.redis.del('cache:admin:dashboard');
+
+    this.logger.log(`Admin updated bin ${binId}: ${JSON.stringify(dto)}`);
+
+    return {
+      success: true,
+      message: 'Bin details and sensor mapping updated successfully',
+      data: await this.prisma.bin.findUnique({
+        where: { id: binId },
+        include: { iotDevice: true },
+      }),
     };
   }
 
