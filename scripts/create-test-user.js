@@ -27,12 +27,19 @@ async function main() {
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
 
-  const phone = process.env.MOCK_PHONE_NUMBER || '+1234567890';
+  const phone = process.env.MOCK_PHONE_NUMBER || '+11234567890';
   const email = 'playstore.tester@smarteco.rw';
 
   console.log(`Checking for test user with phone: ${phone}`);
 
   try {
+    // Clean up any old test user with the same email but different phone to prevent unique constraint conflicts
+    const oldUserWithEmail = await prisma.user.findUnique({ where: { email } });
+    if (oldUserWithEmail && oldUserWithEmail.phone !== phone) {
+      console.log(`Deleting old test user with conflicting email: ${email}`);
+      await prisma.user.delete({ where: { id: oldUserWithEmail.id } });
+    }
+
     let user = await prisma.user.findUnique({
       where: { phone },
     });

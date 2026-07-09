@@ -42,7 +42,7 @@ export class AuthService {
   ) {
     this.mockPhoneNumber =
       this.configService.get<string>('app.mockAuth.phoneNumber') ||
-      '+1234567890';
+      '+11234567890';
     this.mockOtp =
       this.configService.get<string>('app.mockAuth.otp') || '123456';
   }
