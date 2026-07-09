@@ -1,0 +1,61 @@
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  Length,
+  Matches,
+  IsEnum,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
+
+export class VerifyOtpDto {
+  @ApiProperty({
+    description: 'Phone number in international format',
+    example: '+250788123456',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\+[1-9]\d{1,14}$/, {
+    message:
+      'Phone number must be in valid international format (e.g., +250XXXXXXXXX)',
+  })
+  phone: string;
+
+  @ApiProperty({
+    description: '6-digit OTP code',
+    example: '123456',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Length(6, 6, { message: 'OTP must be exactly 6 digits' })
+  otp: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Referral code of the inviting user (only for first-time registration)',
+    example: 'ECOJB2024',
+  })
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Firebase Cloud Messaging token for push notifications. Register on first login or when token refreshes.',
+    example: 'fMp6KqR...',
+  })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When registering a brand new account, indicates whether the user is signing up as USER or COLLECTOR. Used to control initial provisioning (e.g. default bins).',
+    enum: UserRole,
+    example: UserRole.USER,
+  })
+  @IsOptional()
+  @IsEnum(UserRole)
+  signupRole?: UserRole;
+}

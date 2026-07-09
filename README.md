@@ -1,98 +1,194 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🌿 SmartEco Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+> Smart Waste Management Platform for Rwanda — Backend API
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+[![NestJS](https://img.shields.io/badge/NestJS-11-ea2845?logo=nestjs)](https://nestjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma)](https://www.prisma.io/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Description
+SmartEco enables residents and businesses in Rwanda to schedule waste pickups, track collectors in real-time, manage IoT smart bins, earn EcoPoints rewards, and make mobile money payments — all from a single platform.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+---
 
-## Project setup
+## ✨ Features
 
-```bash
-$ npm install
+- **🔐 OTP Authentication** — Phone-based login with JWT access + refresh tokens
+- **📅 Pickup Scheduling** — Book waste collection with preferred time slots
+- **📍 Real-Time Tracking** — Track collector location via WebSocket
+- **🗑️ Smart Bin Management** — IoT-connected bins with fill-level monitoring
+- **⭐ EcoPoints Rewards** — Earn points for every pickup, tier-based multipliers
+- **🤝 Referral System** — Invite friends, earn bonus EcoPoints
+- **💰 Mobile Payments** — MTN MoMo & Airtel Money integration
+- **📢 Notifications** — Push (Firebase), SMS, WhatsApp, and in-app
+- **👨‍💼 Admin Dashboard** — System management and analytics
+
+## 🏗️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | NestJS 11 (TypeScript) |
+| Database | PostgreSQL 16 |
+| ORM | Prisma 7 |
+| Auth | JWT + Passport |
+| Docs | Swagger / OpenAPI |
+| Real-time | Socket.io |
+| Queue | BullMQ + Redis |
+| Payments | MTN MoMo, Airtel Money |
+| SMS | Africa's Talking |
+| Push | Firebase Cloud Messaging |
+
+## 📁 Project Structure
+
+```
+src/
+├── common/                 # Shared utilities
+│   ├── constants/          # App-wide constants
+│   ├── decorators/         # @CurrentUser, @Roles
+│   ├── dto/                # PaginationDto, ApiResponseDto
+│   ├── filters/            # Global exception filter
+│   ├── guards/             # RolesGuard
+│   └── interceptors/       # Response transform interceptor
+├── config/                 # Configuration & validation
+├── database/               # Prisma schema, service & module
+├── modules/
+│   ├── auth/               # OTP, JWT, login/register
+│   ├── users/              # Profile, referrals, FCM
+│   ├── pickups/            # Waste pickup scheduling
+│   ├── bins/               # Smart bin CRUD
+│   ├── eco-points/         # Rewards & tier system
+│   ├── collectors/         # Collector management
+│   ├── payments/           # Mobile money transactions
+│   ├── notifications/      # Multi-channel notifications
+│   └── admin/              # Admin operations
+├── jobs/                   # Background job queues
+├── websocket/              # Real-time tracking gateway
+├── app.module.ts
+└── main.ts
 ```
 
-## Compile and run the project
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Node.js** ≥ 18
+- **PostgreSQL** ≥ 14
+- **Redis** (optional, for queues)
+
+### Installation
 
 ```bash
-# development
-$ npm run start
+# Clone the repository
+git clone https://github.com/your-username/smarteco-backend.git
+cd smarteco-backend
 
-# watch mode
-$ npm run start:dev
+# Install dependencies
+npm install
 
-# production mode
-$ npm run start:prod
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your actual values
 ```
 
-## Run tests
+### Database Setup
 
 ```bash
-# unit tests
-$ npm run test
+# Generate Prisma client
+npx prisma generate
 
-# e2e tests
-$ npm run test:e2e
+# Run database migrations
+npx prisma migrate dev
 
-# test coverage
-$ npm run test:cov
+# (Optional) Seed the database
+npx prisma db seed
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Run the Server
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Development (watch mode)
+npm run start:dev
+
+# Production build
+npm run build
+npm run start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The API will be available at `http://localhost:3000` and Swagger docs at `http://localhost:3000/api/docs`.
 
-## Resources
+## 🔑 Environment Variables
 
-Check out a few resources that may come in handy when working with NestJS:
+Copy `.env.example` and fill in your values:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```env
+# App
+PORT=3000
+NODE_ENV=development
 
-## Support
+# Database
+DATABASE_URL=postgresql://user@localhost:5432/smarteco
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+# JWT
+JWT_SECRET=your-secret-here
+JWT_REFRESH_SECRET=your-refresh-secret-here
 
-## Stay in touch
+# See .env.example for all available variables
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+> ⚠️ **Never commit `.env` to version control.** The `.env.example` file contains placeholder values for reference.
 
-## License
+## 📚 API Documentation
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Once the server is running, visit **[http://localhost:3000/api/docs](http://localhost:3000/api/docs)** for interactive Swagger documentation.
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/auth/otp/send` | Send OTP to phone |
+| `POST` | `/api/v1/auth/otp/verify` | Verify OTP & get tokens |
+| `POST` | `/api/v1/auth/refresh` | Refresh access token |
+| `GET` | `/api/v1/users/me` | Get user profile |
+| `PATCH` | `/api/v1/users/me` | Update profile |
+| `GET` | `/api/v1/users/me/referral` | Get referral stats |
+
+### Response Format
+
+All responses follow a consistent format:
+
+```json
+{
+  "success": true,
+  "message": "Optional message",
+  "data": { ... },
+  "meta": { "page": 1, "limit": 10, "total": 100, "totalPages": 10 }
+}
+```
+
+## 🧪 Testing
+
+```bash
+# Unit tests
+npm run test
+
+# E2E tests
+npm run test:e2e
+
+# Test coverage
+npm run test:cov
+```
+
+## 🧑‍💻 Development Notes
+
+- **Sandbox OTP**: In development mode, OTP is always `123456`
+- **API Prefix**: All routes are prefixed with `/api/v1`
+- **Validation**: Global `ValidationPipe` with whitelist enabled
+- **Error Handling**: Global `HttpExceptionFilter` for consistent error responses
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+Built with 💚 for a cleaner Rwanda 🇷🇼
