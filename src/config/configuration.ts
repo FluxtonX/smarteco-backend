@@ -68,7 +68,7 @@ export default registerAs('app', () => ({
 
   // Sandbox / Play Store Mock Auth
   mockAuth: {
-    phoneNumber: process.env.MOCK_PHONE_NUMBER || '+1234567890',
+    phoneNumber: process.env.MOCK_PHONE_NUMBER || '+11234567890',
     otp: process.env.MOCK_OTP || '123456',
   },
 }));
