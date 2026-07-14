@@ -169,6 +169,8 @@ model User {
   referrer         User?                 @relation("Referrals", fields: [referredBy], references: [id])
   collectorProfile CollectorProfile?
   refreshTokens    RefreshToken[]
+  sortingEvents    SortingEvent[]
+  ecoPointsLedger  EcoPointsLedger[]
 
   @@map("users")
 }
@@ -288,6 +290,7 @@ model Bin {
   pickups        Pickup[]
   iotDevice      IotDevice?
   iotTelemetries IotTelemetry[]
+  sortingEvents  SortingEvent[]
 
   @@index([userId])
   @@index([qrCode])
@@ -520,4 +523,75 @@ model SystemSetting {
 
   @@index([key])
   @@map("system_settings")
+}
+
+// ─── AI VISUAL SORTING KIOSK MODELS ────────────────
+
+enum SortingCategory {
+  PLASTIC
+  PAPER
+  METAL
+  GLASS
+  ORGANIC
+  GENERAL
+  RECYCLABLE
+}
+
+model Kiosk {
+  id          String   @id @default(uuid())
+  kioskId     String   @unique @map("kiosk_id")
+  name        String?
+  location    String?
+  status      String   @default("ACTIVE")
+  apiKey      String?  @unique @map("api_key")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  sortingEvents SortingEvent[]
+
+  @@map("kiosks")
+}
+
+model SortingEvent {
+  id             String          @id @default(uuid())
+  kioskId        String          @map("kiosk_id")
+  category       SortingCategory
+  confidence     Float
+  capturedAt     DateTime        @map("captured_at")
+  syncedAt       DateTime        @default(now()) @map("synced_at")
+  idempotencyKey String          @unique @map("idempotency_key")
+  userId         String?         @map("user_id")
+  binId          String?         @map("bin_id")
+
+  // Relations
+  kiosk        Kiosk             @relation(fields: [kioskId], references: [kioskId], onDelete: Cascade)
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bin          Bin?              @relation(fields: [binId], references: [id], onDelete: SetNull)
+  ledgerRecord EcoPointsLedger[]
+
+  @@index([kioskId])
+  @@index([userId])
+  @@index([binId])
+  @@index([idempotencyKey])
+  @@map("sorting_events")
+}
+
+model EcoPointsLedger {
+  id             String      @id @default(uuid())
+  userId         String      @map("user_id")
+  sortingEventId String?     @map("sorting_event_id")
+  pointsAwarded  Int         @map("points_awarded")
+  runningBalance Int         @map("running_balance")
+  tier           EcoTier     @default(ECO_STARTER)
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sortingEvent SortingEvent? @relation(fields: [sortingEventId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sortingEventId])
+  @@index([createdAt])
+  @@map("ecopoints_ledger")
 }
