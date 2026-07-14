@@ -26,6 +26,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { TwilioService } from '../../integrations/twilio/twilio.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
+import { TIER_THRESHOLDS } from '../../common/constants';
 
 @Injectable()
 export class AdminService {
@@ -218,13 +219,24 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
 
+    const data = await Promise.all(
+      users.map(async (u) => {
+        const totalPoints = await this.getUserEcoPoints(u.id);
+
+        return {
+          ...u,
+          subscriptionPlan: 'BASIC',
+          ecoPoints: totalPoints,
+          ecoTier: this.calculateEcoTier(totalPoints),
+          totalPickups: u._count.pickups,
+          _count: undefined,
+        };
+      }),
+    );
+
     return {
       success: true,
-      data: users.map((u) => ({
-        ...u,
-        totalPickups: u._count.pickups,
-        _count: undefined,
-      })),
+      data,
       meta: {
         page: query.page,
         limit: query.limit,
@@ -248,6 +260,10 @@ export class AdminService {
     const updateData: Prisma.UserUpdateInput = {};
     if (dto.role !== undefined) updateData.role = dto.role;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
+    if (dto.firstName !== undefined) updateData.firstName = dto.firstName;
+    if (dto.lastName !== undefined) updateData.lastName = dto.lastName;
+    if (dto.phone !== undefined) updateData.phone = dto.phone;
+    if (dto.userType !== undefined) updateData.userType = dto.userType;
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
@@ -259,8 +275,58 @@ export class AdminService {
         lastName: true,
         role: true,
         isActive: true,
+        userType: true,
       },
     });
+
+    const shouldUpdateCollectorProfile =
+      dto.role === UserRole.COLLECTOR ||
+      user.role === UserRole.COLLECTOR ||
+      dto.vehiclePlate !== undefined;
+
+    if (shouldUpdateCollectorProfile) {
+      await this.prisma.collectorProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          zone: dto.zone || 'Kigali, Rwanda',
+          vehiclePlate: dto.vehiclePlate || 'N/A',
+        },
+        update: {
+          ...(dto.zone !== undefined && { zone: dto.zone }),
+          ...(dto.vehiclePlate !== undefined && {
+            vehiclePlate: dto.vehiclePlate,
+          }),
+        },
+      });
+    }
+
+    if (dto.ecoPoints !== undefined || dto.tier !== undefined) {
+      const currentPoints = await this.getUserEcoPoints(userId);
+      let targetPoints = currentPoints;
+
+      if (dto.ecoPoints !== undefined) {
+        targetPoints = dto.ecoPoints;
+      } else if (dto.tier !== undefined) {
+        const tierKey = dto.tier.toUpperCase().replace(/ /g, '_');
+        if (tierKey in TIER_THRESHOLDS) {
+          targetPoints =
+            TIER_THRESHOLDS[tierKey as keyof typeof TIER_THRESHOLDS].min;
+        }
+      }
+
+      const difference = targetPoints - currentPoints;
+      if (difference !== 0) {
+        await this.prisma.ecoPointTransaction.create({
+          data: {
+            userId,
+            points: difference,
+            action: 'ADMIN_ADJUSTMENT',
+            description: `Points adjusted by administrator. Previous: ${currentPoints}, New: ${targetPoints}`,
+          },
+        });
+      }
+    }
 
     this.logger.log(`Admin updated user ${userId}: ${JSON.stringify(dto)}`);
     await this.redis.del('cache:admin:dashboard');
@@ -270,6 +336,53 @@ export class AdminService {
       message: 'User updated successfully',
       data: updated,
     };
+  }
+
+  async toggleUserStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: !user.isActive },
+      select: {
+        id: true,
+        phone: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: 'Status toggled successfully',
+      data: updated,
+    };
+  }
+
+  private async getUserEcoPoints(userId: string) {
+    const result = await this.prisma.ecoPointTransaction.aggregate({
+      where: { userId },
+      _sum: { points: true },
+    });
+
+    return result._sum.points || 0;
+  }
+
+  private calculateEcoTier(points: number) {
+    if (points >= TIER_THRESHOLDS.ECO_LEGEND.min) return 'ECO_LEGEND';
+    if (points >= TIER_THRESHOLDS.ECO_CHAMPION.min) return 'ECO_CHAMPION';
+    if (points >= TIER_THRESHOLDS.ECO_WARRIOR.min) return 'ECO_WARRIOR';
+    return 'ECO_STARTER';
   }
 
   // ─── OPERATIONAL ADMIN MODULES ─────────────────
