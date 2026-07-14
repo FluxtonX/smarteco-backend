@@ -34,10 +34,10 @@ export const ECOPOINTS = {
 // ─── Tier Thresholds ─────────────────────────────
 
 export const TIER_THRESHOLDS = {
-
   ECO_STARTER: { min: 0, max: 499, multiplier: 1.0 },
   ECO_WARRIOR: { min: 500, max: 1999, multiplier: 1.25 },
-  ECO_CHAMPION: { min: 2000, max: Infinity, multiplier: 1.5 },
+  ECO_CHAMPION: { min: 2000, max: 9999, multiplier: 1.5 },
+  ECO_LEGEND: { min: 10000, max: Infinity, multiplier: 2.0 },
 };
 
 // ─── AI Visual Sorting Points ────────────────────

@@ -292,7 +292,7 @@ export class EcoPointsService {
   }
 
   private calculateTier(points: number): keyof typeof TIER_THRESHOLDS {
-
+    if (points >= 10000) return 'ECO_LEGEND';
     if (points >= 2000) return 'ECO_CHAMPION';
     if (points >= 500) return 'ECO_WARRIOR';
 
