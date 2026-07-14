@@ -15,6 +15,7 @@ import { CollectorsModule } from './modules/collectors/collectors.module';
 import { EcoPointsModule } from './modules/eco-points/eco-points.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { SortingModule } from './modules/sorting/sorting.module';
 import { UssdModule } from './integrations/ussd/ussd.module';
 import { WhatsAppModule } from './integrations/whatsapp/whatsapp.module';
 import { TwilioModule } from './integrations/twilio/twilio.module';
@@ -50,6 +51,7 @@ import { RedisModule } from './infrastructure/redis/redis.module';
     EcoPointsModule,
     NotificationsModule,
     AdminModule,
+    SortingModule,
 
     // ─── Integration Modules ────────────────────────
     TwilioModule,
