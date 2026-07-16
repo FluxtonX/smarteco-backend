@@ -50,7 +50,11 @@ export const AI_SORTING_POINTS = {
   ORGANIC: 5,
   GENERAL: 2,
   RECYCLABLE: 10,
-
+  RECYCLE: 10,
+  COMPOST: 5,
+  E_WASTE: 20,
+  LANDFILL: 1,
+  HAZARDOUS: 15,
 };
 
 // ─── Pickup ──────────────────────────────────────

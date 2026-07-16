@@ -535,6 +535,11 @@ enum SortingCategory {
   ORGANIC
   GENERAL
   RECYCLABLE
+  RECYCLE
+  COMPOST
+  E_WASTE
+  LANDFILL
+  HAZARDOUS
 }
 
 model Kiosk {
