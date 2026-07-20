@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -280,6 +281,16 @@ export class AdminController {
   @ApiParam({ name: 'id', description: 'User UUID' })
   async toggleUserStatus(@Param('id', ParseUUIDPipe) userId: string) {
     return this.adminService.toggleUserStatus(userId);
+  }
+
+  @Delete('users/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete user permanently',
+  })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  async deleteUser(@Param('id', ParseUUIDPipe) userId: string) {
+    return this.adminService.deleteUser(userId);
   }
 
   @Get('pickups')
