@@ -12,6 +12,7 @@ import {
   AssignCollectorDto,
   ApproveCollectorDto,
   UpdateBinAdminDto,
+  CreateAdminUserDto,
 } from './dto';
 import { PaginationDto } from '../../common/dto';
 import {
@@ -205,6 +206,7 @@ export class AdminService {
           email: true,
           firstName: true,
           lastName: true,
+          subRole: true,
           userType: true,
           role: true,
           isActive: true,
@@ -243,6 +245,44 @@ export class AdminService {
         total,
         totalPages: Math.ceil(total / query.limit),
       },
+    };
+  }
+
+  // ─── CREATE USER / ADMIN ────────────────────────
+
+  async createUser(dto: CreateAdminUserDto) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: dto.phone },
+          ...(dto.email ? [{ email: dto.email }] : []),
+        ],
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException('User or admin account with this phone or email already exists');
+    }
+
+    const newUser = await this.prisma.user.create({
+      data: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        phone: dto.phone,
+        role: dto.role || UserRole.ADMIN,
+        subRole: dto.subRole || 'Super Admin',
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
+      },
+    });
+
+    // Invalidate users list cache
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: 'Admin account created successfully in database',
+      data: newUser,
     };
   }
 
@@ -366,6 +406,27 @@ export class AdminService {
       success: true,
       message: 'Status toggled successfully',
       data: updated,
+    };
+  }
+
+  async deleteUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: 'User deleted successfully',
     };
   }
 

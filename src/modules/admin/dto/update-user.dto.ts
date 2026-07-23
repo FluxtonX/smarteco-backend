@@ -58,4 +58,13 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   vehiclePlate?: string;
+
+  @ApiPropertyOptional({ description: 'Sub role title from admin UI' })
+  @IsOptional()
+  @IsString()
+  subRole?: string;
+
+  @ApiPropertyOptional({ description: 'Assigned permissions list' })
+  @IsOptional()
+  permissions?: string[];
 }
