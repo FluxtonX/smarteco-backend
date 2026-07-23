@@ -58,7 +58,7 @@ export class AuthService {
     });
 
     // ─── Existence Checks ─────────────────────────────
-    if (phone !== this.mockPhoneNumber) {
+    if (phone !== this.mockPhoneNumber && !phone.startsWith('+1999')) {
       if (isLogin === true && !existingUser) {
         throw new BadRequestException(
           'User not found. Please create an account.',
@@ -72,10 +72,10 @@ export class AuthService {
       }
     }
 
-    // Skip Twilio for the mock phone number
-    if (phone === this.mockPhoneNumber) {
+    // Skip Twilio for the mock phone number and simulation phone numbers
+    if (phone === this.mockPhoneNumber || phone.startsWith('+1999')) {
       this.logger.log(
-        `Skipping Twilio OTP send for mock phone number: ${phone}`,
+        `Skipping Twilio OTP send for mock/simulation phone number: ${phone}`,
       );
       return {
         success: true,
@@ -120,9 +120,9 @@ export class AuthService {
 
     // Verify OTP via Twilio Verify
     let verification: { valid: boolean; status: string };
-    if (phone === this.mockPhoneNumber && otp === this.mockOtp) {
+    if ((phone === this.mockPhoneNumber && otp === this.mockOtp) || (phone.startsWith('+1999') && otp === '123456')) {
       this.logger.log(
-        `Bypassing Twilio OTP verification for mock phone number: ${phone}`,
+        `Bypassing Twilio OTP verification for mock/simulation phone number: ${phone}`,
       );
       verification = { valid: true, status: 'approved' };
     } else {
@@ -280,14 +280,18 @@ export class AuthService {
           email,
           phone: 'ADMIN_PORTAL', // Fixed placeholder for admin
           role: 'ADMIN',
+          subRole: 'Super Admin',
           referralCode: this.generateReferralCode(),
         },
       });
-    } else if (user.role !== 'ADMIN') {
-      // Ensure the user actually has the ADMIN role
+    } else if (user.role !== 'ADMIN' || !user.subRole) {
+      // Ensure the user actually has the ADMIN role and Super Admin subRole
       user = await this.prisma.user.update({
         where: { id: user.id },
-        data: { role: 'ADMIN' },
+        data: {
+          role: 'ADMIN',
+          subRole: user.subRole || 'Super Admin',
+        },
       });
     }
 

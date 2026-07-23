@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import databaseConfig from './config/database.config';
@@ -22,6 +22,8 @@ import { TwilioModule } from './integrations/twilio/twilio.module';
 import { FirebaseModule } from './integrations/firebase/firebase.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
+import { SimulationModule } from './modules/simulation/simulation.module';
+import { SimulationMiddleware } from './modules/simulation/simulation.middleware';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { RedisModule } from './infrastructure/redis/redis.module';
     NotificationsModule,
     AdminModule,
     SortingModule,
+    SimulationModule,
 
     // ─── Integration Modules ────────────────────────
     TwilioModule,
@@ -64,4 +67,8 @@ import { RedisModule } from './infrastructure/redis/redis.module';
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(SimulationMiddleware).forRoutes('*');
+  }
+}
