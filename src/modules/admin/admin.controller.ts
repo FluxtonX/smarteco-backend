@@ -123,9 +123,13 @@ export class AdminController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create new user or admin account',
-    description: 'Create a new user or admin user with assigned role and sub-role directly in database. Admin only.',
+    description:
+      'Create a new user or admin user with assigned role and sub-role directly in database. Admin only.',
   })
-  @ApiResponse({ status: 201, description: 'User account created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'User account created successfully',
+  })
   @ApiResponse({ status: 409, description: 'User already exists' })
   async createUser(@Body() dto: CreateAdminUserDto) {
     return this.adminService.createUser(dto);
@@ -134,7 +138,8 @@ export class AdminController {
   @Get('bins')
   @ApiOperation({
     summary: 'Get all user bins',
-    description: 'Get list of all registered waste bins with their telemetry and status.',
+    description:
+      'Get list of all registered waste bins with their telemetry and status.',
   })
   async getBins() {
     return this.adminService.getBins();
@@ -144,10 +149,17 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Assign collector to a smart bin',
-    description: 'Assign a dispatch collector to a smart bin directly. Admin only.',
+    description:
+      'Assign a dispatch collector to a smart bin directly. Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'Collector assigned to bin successfully' })
-  @ApiResponse({ status: 404, description: 'Bin or Collector profile not found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Collector assigned to bin successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Bin or Collector profile not found',
+  })
   async assignBinCollector(@Body() dto: AssignBinCollectorDto) {
     return this.adminService.assignBinCollector(dto);
   }

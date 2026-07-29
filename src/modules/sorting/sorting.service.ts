@@ -300,7 +300,8 @@ export class SortingService {
       success: true,
       data: {
         userId,
-        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+        userName:
+          `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
         currentPoints: totalPoints,
         tier,
         multiplier: tierInfo.multiplier,
@@ -332,11 +333,15 @@ export class SortingService {
             success: true,
             data,
           });
-          this.logger.log(`Broadcasted live sorting event to user socket: ${socketId}`);
+          this.logger.log(
+            `Broadcasted live sorting event to user socket: ${socketId}`,
+          );
         }
       }
     } catch (err) {
-      this.logger.error(`WebSocket broadcast failed: ${(err as Error).message}`);
+      this.logger.error(
+        `WebSocket broadcast failed: ${(err as Error).message}`,
+      );
     }
   }
 }

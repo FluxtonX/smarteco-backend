@@ -36,7 +36,9 @@ export class PrismaService
         $allModels: {
           async create({ model, args, query }) {
             try {
-              const { simulationLocalStorage } = require('../modules/simulation/simulation-context');
+              const {
+                simulationLocalStorage,
+              } = require('../modules/simulation/simulation-context');
               const simulationId = simulationLocalStorage.getStore();
               if (simulationId) {
                 const modelsWithSimulationId = [
@@ -65,7 +67,9 @@ export class PrismaService
           },
           async createMany({ model, args, query }) {
             try {
-              const { simulationLocalStorage } = require('../modules/simulation/simulation-context');
+              const {
+                simulationLocalStorage,
+              } = require('../modules/simulation/simulation-context');
               const simulationId = simulationLocalStorage.getStore();
               if (simulationId) {
                 const modelsWithSimulationId = [

@@ -97,7 +97,10 @@ export class SimulationService {
 
     // Run the simulation runner in the background
     this.runRunner(session.id, scenario, startedBy).catch((err) => {
-      this.logger.error(`Runner failed for session ${session.id}: ${err.message}`, err.stack);
+      this.logger.error(
+        `Runner failed for session ${session.id}: ${err.message}`,
+        err.stack,
+      );
     });
 
     return {
@@ -109,7 +112,9 @@ export class SimulationService {
 
   // Transactional safe cleanup of simulation data
   async clearSimulationData(simulationId: string) {
-    this.logger.log(`Starting transactional cleanup for simulation ID: ${simulationId}`);
+    this.logger.log(
+      `Starting transactional cleanup for simulation ID: ${simulationId}`,
+    );
 
     // Verify session exists
     const session = await this.prisma.simulationSession.findUnique({
@@ -117,7 +122,9 @@ export class SimulationService {
     });
 
     if (!session) {
-      throw new NotFoundException(`Simulation session ${simulationId} not found`);
+      throw new NotFoundException(
+        `Simulation session ${simulationId} not found`,
+      );
     }
 
     // Execute deletion sequence in order of foreign key dependencies
@@ -195,7 +202,11 @@ export class SimulationService {
   }
 
   // Internal helper to run the simulation steps
-  private async runRunner(sessionId: string, scenario: SimulationScenario, startedBy: string) {
+  private async runRunner(
+    sessionId: string,
+    scenario: SimulationScenario,
+    startedBy: string,
+  ) {
     this.activeRuns.set(sessionId, true);
 
     const port = process.env.PORT || 3000;
@@ -217,23 +228,34 @@ export class SimulationService {
       payments: [],
     };
 
-    const addLog = async (level: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR', message: string) => {
+    const addLog = async (
+      level: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR',
+      message: string,
+    ) => {
       const entry = { timestamp: new Date().toISOString(), level, message };
       logs.push(entry);
       this.logger.log(`[SIMULATION ${sessionId}] [${level}] ${message}`);
 
       // Persist logs periodically or at each log in dev
-      await this.prisma.simulationSession.update({
-        where: { id: sessionId },
-        data: { logs },
-      }).catch(() => {});
+      await this.prisma.simulationSession
+        .update({
+          where: { id: sessionId },
+          data: { logs },
+        })
+        .catch(() => {});
     };
 
-    const updateProgress = async (progress: number, completedSteps: number, totalSteps: number) => {
-      await this.prisma.simulationSession.update({
-        where: { id: sessionId },
-        data: { progress, completedSteps, totalSteps },
-      }).catch(() => {});
+    const updateProgress = async (
+      progress: number,
+      completedSteps: number,
+      totalSteps: number,
+    ) => {
+      await this.prisma.simulationSession
+        .update({
+          where: { id: sessionId },
+          data: { progress, completedSteps, totalSteps },
+        })
+        .catch(() => {});
     };
 
     await addLog('INFO', `Starting scenario: ${scenario}`);
@@ -242,17 +264,47 @@ export class SimulationService {
 
     // Define steps based on the scenario
     if (scenario === SimulationScenario.FULL_E2E) {
-      steps = this.defineFullE2EScenario(client, sessionId, createdRecords, addLog, errors);
+      steps = this.defineFullE2EScenario(
+        client,
+        sessionId,
+        createdRecords,
+        addLog,
+        errors,
+      );
     } else if (scenario === SimulationScenario.USER_FLOW) {
-      steps = this.defineUserFlowScenario(client, sessionId, createdRecords, addLog, errors);
+      steps = this.defineUserFlowScenario(
+        client,
+        sessionId,
+        createdRecords,
+        addLog,
+        errors,
+      );
     } else if (scenario === SimulationScenario.ADMIN_FLOW) {
-      steps = this.defineAdminFlowScenario(client, sessionId, createdRecords, addLog, errors);
+      steps = this.defineAdminFlowScenario(
+        client,
+        sessionId,
+        createdRecords,
+        addLog,
+        errors,
+      );
     } else if (scenario === SimulationScenario.API_FLOW) {
       steps = this.defineApiFlowScenario(client, sessionId, addLog, errors);
     } else if (scenario === SimulationScenario.DB_SYNC) {
-      steps = this.defineDbSyncScenario(client, sessionId, createdRecords, addLog, errors);
+      steps = this.defineDbSyncScenario(
+        client,
+        sessionId,
+        createdRecords,
+        addLog,
+        errors,
+      );
     } else if (scenario === SimulationScenario.ERROR_HANDLING) {
-      steps = this.defineErrorHandlingScenario(client, sessionId, createdRecords, addLog, errors);
+      steps = this.defineErrorHandlingScenario(
+        client,
+        sessionId,
+        createdRecords,
+        addLog,
+        errors,
+      );
     }
 
     const totalSteps = steps.length;
@@ -264,7 +316,10 @@ export class SimulationService {
     for (const step of steps) {
       // Check if simulation was cancelled
       if (this.activeRuns.get(sessionId) === false) {
-        await addLog('WARN', 'Simulation runner stopped because it was cancelled.');
+        await addLog(
+          'WARN',
+          'Simulation runner stopped because it was cancelled.',
+        );
         return;
       }
 
@@ -311,7 +366,10 @@ export class SimulationService {
       },
     });
 
-    await addLog(failed ? 'ERROR' : 'SUCCESS', `Simulation finished. Status: ${status}`);
+    await addLog(
+      failed ? 'ERROR' : 'SUCCESS',
+      `Simulation finished. Status: ${status}`,
+    );
     this.activeRuns.delete(sessionId);
   }
 
@@ -345,17 +403,25 @@ export class SimulationService {
           if (res.status !== 200 || res.data?.data?.status !== 'OK') {
             throw new Error(`Health check failed: Status ${res.status}`);
           }
-          await addLog('INFO', `Health API verified: status=OK, uptime=${res.data.data.uptime}s`);
+          await addLog(
+            'INFO',
+            `Health API verified: status=OK, uptime=${res.data.data.uptime}s`,
+          );
 
           // 2. Query database directly to verify Prisma connection
           const userCount = await this.prisma.user.count();
-          await addLog('INFO', `Database connection verified. Existing user count: ${userCount}`);
+          await addLog(
+            'INFO',
+            `Database connection verified. Existing user count: ${userCount}`,
+          );
 
           // 3. Verify key configurations
           const hasAdminEmail = !!this.configService.get('ADMIN_EMAIL');
           const hasAdminPassword = !!this.configService.get('ADMIN_PASSWORD');
           if (!hasAdminEmail || !hasAdminPassword) {
-            throw new Error('Required configuration ADMIN_EMAIL/ADMIN_PASSWORD is missing');
+            throw new Error(
+              'Required configuration ADMIN_EMAIL/ADMIN_PASSWORD is missing',
+            );
           }
         },
       },
@@ -366,7 +432,10 @@ export class SimulationService {
           userPhone = `+1999${rand}`;
 
           // Send OTP (Bypassed)
-          const sendRes = await client.post('/auth/otp/send', { phone: userPhone, isLogin: false });
+          const sendRes = await client.post('/auth/otp/send', {
+            phone: userPhone,
+            isLogin: false,
+          });
           if (sendRes.status !== 200 || !sendRes.data.success) {
             throw new Error(`Send OTP failed: ${JSON.stringify(sendRes.data)}`);
           }
@@ -379,14 +448,19 @@ export class SimulationService {
           });
 
           if (verifyRes.status !== 200 || !verifyRes.data.success) {
-            throw new Error(`Verify OTP failed: ${JSON.stringify(verifyRes.data)}`);
+            throw new Error(
+              `Verify OTP failed: ${JSON.stringify(verifyRes.data)}`,
+            );
           }
 
           userToken = verifyRes.data.data.accessToken;
           userId = verifyRes.data.data.user.id;
           createdRecords.users.push(userId);
 
-          await addLog('INFO', `User registered successfully. ID: ${userId}, Phone: ${userPhone}`);
+          await addLog(
+            'INFO',
+            `User registered successfully. ID: ${userId}, Phone: ${userPhone}`,
+          );
         },
       },
       {
@@ -405,7 +479,9 @@ export class SimulationService {
           );
 
           if (updateRes.status !== 200 || !updateRes.data.success) {
-            throw new Error(`Profile update failed: ${JSON.stringify(updateRes.data)}`);
+            throw new Error(
+              `Profile update failed: ${JSON.stringify(updateRes.data)}`,
+            );
           }
 
           // Verify update
@@ -413,8 +489,13 @@ export class SimulationService {
             headers: { Authorization: `Bearer ${userToken}` },
           });
 
-          if (meRes.data.data.firstName !== 'Simulated' || meRes.data.data.lastName !== 'Resident') {
-            throw new Error('Profile update verification failed. Values mismatch.');
+          if (
+            meRes.data.data.firstName !== 'Simulated' ||
+            meRes.data.data.lastName !== 'Resident'
+          ) {
+            throw new Error(
+              'Profile update verification failed. Values mismatch.',
+            );
           }
 
           await addLog('INFO', `User profile updated: Simulated Resident`);
@@ -428,8 +509,14 @@ export class SimulationService {
             headers: { Authorization: `Bearer ${userToken}` },
           });
 
-          if (binsRes.status !== 200 || !binsRes.data.success || binsRes.data.data.length === 0) {
-            throw new Error(`Failed to fetch default bins: ${JSON.stringify(binsRes.data)}`);
+          if (
+            binsRes.status !== 200 ||
+            !binsRes.data.success ||
+            binsRes.data.data.length === 0
+          ) {
+            throw new Error(
+              `Failed to fetch default bins: ${JSON.stringify(binsRes.data)}`,
+            );
           }
 
           const bin = binsRes.data.data[0];
@@ -445,7 +532,9 @@ export class SimulationService {
             fillLevel: 96,
             batteryLevel: 92,
             signalRssi: -72,
-            apiKey: this.configService.get('IOT_DEVICE_API_KEY') || 'smarteco-iot-secret-key-2026',
+            apiKey:
+              this.configService.get('IOT_DEVICE_API_KEY') ||
+              'smarteco-iot-secret-key-2026',
           });
 
           if (syncRes.status !== 200) {
@@ -455,12 +544,16 @@ export class SimulationService {
           await addLog('INFO', `IoT Sync completed. Sent fillLevel=96%.`);
 
           // Verify database status is FULL and pickup is scheduled
-          const dbBin = await this.prisma.bin.findUnique({ where: { qrCode: selectedBinQr } });
+          const dbBin = await this.prisma.bin.findUnique({
+            where: { qrCode: selectedBinQr },
+          });
           if (!dbBin) {
             throw new Error('Bin not found in database');
           }
           if (dbBin.status !== 'FULL' || dbBin.fillLevel !== 96) {
-            throw new Error(`Database Bin state mismatch. Expected status FULL, got ${dbBin.status}`);
+            throw new Error(
+              `Database Bin state mismatch. Expected status FULL, got ${dbBin.status}`,
+            );
           }
 
           // Fetch pickups to find the auto-scheduled one
@@ -473,14 +566,19 @@ export class SimulationService {
           );
 
           if (!autoPickup) {
-            throw new Error('Auto-scheduled pickup was not created for full bin.');
+            throw new Error(
+              'Auto-scheduled pickup was not created for full bin.',
+            );
           }
 
           pickupId = autoPickup.id;
           pickupRef = autoPickup.reference;
           createdRecords.pickups.push(pickupId);
 
-          await addLog('INFO', `Auto-scheduled pickup scheduled successfully. Ref: ${pickupRef}, ID: ${pickupId}`);
+          await addLog(
+            'INFO',
+            `Auto-scheduled pickup scheduled successfully. Ref: ${pickupRef}, ID: ${pickupId}`,
+          );
         },
       },
       {
@@ -490,7 +588,10 @@ export class SimulationService {
           collectorPhone = `+1999${rand}`;
 
           // Create collector user
-          await client.post('/auth/otp/send', { phone: collectorPhone, isLogin: false });
+          await client.post('/auth/otp/send', {
+            phone: collectorPhone,
+            isLogin: false,
+          });
           const verifyRes = await client.post('/auth/otp/verify', {
             phone: collectorPhone,
             otp: '123456',
@@ -503,12 +604,17 @@ export class SimulationService {
           // Self-register as collector
           const regRes = await client.post(
             '/collectors/register-me',
-            { vehiclePlate: `RAD ${rand.toString().substring(0, 3)}A`, zone: 'Kigali' },
+            {
+              vehiclePlate: `RAD ${rand.toString().substring(0, 3)}A`,
+              zone: 'Kigali',
+            },
             { headers: { Authorization: `Bearer ${collectorToken}` } },
           );
 
           if (regRes.status !== 201 || !regRes.data.success) {
-            throw new Error(`Collector self-registration failed: ${JSON.stringify(regRes.data)}`);
+            throw new Error(
+              `Collector self-registration failed: ${JSON.stringify(regRes.data)}`,
+            );
           }
 
           // Admin logs in to approve collector
@@ -530,7 +636,9 @@ export class SimulationService {
             headers: { Authorization: `Bearer ${adminToken}` },
           });
 
-          const application = pendingRes.data.data.find((c: any) => c.userId === collectorUserId);
+          const application = pendingRes.data.data.find(
+            (c: any) => c.userId === collectorUserId,
+          );
           if (!application) {
             throw new Error('Collector application not found in pending list');
           }
@@ -545,7 +653,9 @@ export class SimulationService {
           );
 
           if (approveRes.status !== 200 || !approveRes.data.success) {
-            throw new Error(`Collector approval failed: ${JSON.stringify(approveRes.data)}`);
+            throw new Error(
+              `Collector approval failed: ${JSON.stringify(approveRes.data)}`,
+            );
           }
 
           // Retrieve new collector tokens with collector role
@@ -556,7 +666,10 @@ export class SimulationService {
           });
           collectorToken = reloginRes.data.data.accessToken;
 
-          await addLog('INFO', `Collector registered and approved. Profile ID: ${collectorProfileId}`);
+          await addLog(
+            'INFO',
+            `Collector registered and approved. Profile ID: ${collectorProfileId}`,
+          );
         },
       },
       {
@@ -569,19 +682,31 @@ export class SimulationService {
           );
 
           if (assignRes.status !== 200 || !assignRes.data.success) {
-            throw new Error(`Collector assignment failed: ${JSON.stringify(assignRes.data)}`);
+            throw new Error(
+              `Collector assignment failed: ${JSON.stringify(assignRes.data)}`,
+            );
           }
 
           // Verify status in database
-          const dbPickup = await this.prisma.pickup.findUnique({ where: { id: pickupId } });
+          const dbPickup = await this.prisma.pickup.findUnique({
+            where: { id: pickupId },
+          });
           if (!dbPickup) {
             throw new Error('Pickup not found in database');
           }
-          if (dbPickup.status !== 'COLLECTOR_ASSIGNED' || dbPickup.collectorId !== collectorProfileId) {
-            throw new Error(`Pickup status update check failed. Got: ${dbPickup.status}`);
+          if (
+            dbPickup.status !== 'COLLECTOR_ASSIGNED' ||
+            dbPickup.collectorId !== collectorProfileId
+          ) {
+            throw new Error(
+              `Pickup status update check failed. Got: ${dbPickup.status}`,
+            );
           }
 
-          await addLog('INFO', `Admin assigned collector RAD 999S to pickup ${pickupRef}`);
+          await addLog(
+            'INFO',
+            `Admin assigned collector RAD 999S to pickup ${pickupRef}`,
+          );
         },
       },
       {
@@ -590,16 +715,37 @@ export class SimulationService {
           const headers = { Authorization: `Bearer ${collectorToken}` };
 
           // EN_ROUTE
-          const r1 = await client.patch(`/collectors/pickups/${pickupId}/status`, { status: 'EN_ROUTE' }, { headers });
-          if (r1.status !== 200) throw new Error(`Transition to EN_ROUTE failed: ${JSON.stringify(r1.data)}`);
+          const r1 = await client.patch(
+            `/collectors/pickups/${pickupId}/status`,
+            { status: 'EN_ROUTE' },
+            { headers },
+          );
+          if (r1.status !== 200)
+            throw new Error(
+              `Transition to EN_ROUTE failed: ${JSON.stringify(r1.data)}`,
+            );
 
           // ARRIVED
-          const r2 = await client.patch(`/collectors/pickups/${pickupId}/status`, { status: 'ARRIVED' }, { headers });
-          if (r2.status !== 200) throw new Error(`Transition to ARRIVED failed: ${JSON.stringify(r2.data)}`);
+          const r2 = await client.patch(
+            `/collectors/pickups/${pickupId}/status`,
+            { status: 'ARRIVED' },
+            { headers },
+          );
+          if (r2.status !== 200)
+            throw new Error(
+              `Transition to ARRIVED failed: ${JSON.stringify(r2.data)}`,
+            );
 
           // IN_PROGRESS
-          const r3 = await client.patch(`/collectors/pickups/${pickupId}/status`, { status: 'IN_PROGRESS' }, { headers });
-          if (r3.status !== 200) throw new Error(`Transition to IN_PROGRESS failed: ${JSON.stringify(r3.data)}`);
+          const r3 = await client.patch(
+            `/collectors/pickups/${pickupId}/status`,
+            { status: 'IN_PROGRESS' },
+            { headers },
+          );
+          if (r3.status !== 200)
+            throw new Error(
+              `Transition to IN_PROGRESS failed: ${JSON.stringify(r3.data)}`,
+            );
 
           // COMPLETED (weight is required)
           const r4 = await client.patch(
@@ -607,10 +753,15 @@ export class SimulationService {
             { status: 'COMPLETED', weightKg: 12.5 },
             { headers },
           );
-          if (r4.status !== 200) throw new Error(`Transition to COMPLETED failed: ${JSON.stringify(r4.data)}`);
+          if (r4.status !== 200)
+            throw new Error(
+              `Transition to COMPLETED failed: ${JSON.stringify(r4.data)}`,
+            );
 
           // Verify DB state
-          const dbPickup = await this.prisma.pickup.findUnique({ where: { id: pickupId } });
+          const dbPickup = await this.prisma.pickup.findUnique({
+            where: { id: pickupId },
+          });
           if (!dbPickup) {
             throw new Error('Pickup not found in database');
           }
@@ -619,12 +770,16 @@ export class SimulationService {
           }
 
           // Verify Bin was reset
-          const dbBin = await this.prisma.bin.findUnique({ where: { qrCode: selectedBinQr } });
+          const dbBin = await this.prisma.bin.findUnique({
+            where: { qrCode: selectedBinQr },
+          });
           if (!dbBin) {
             throw new Error('Bin not found in database');
           }
           if (dbBin.fillLevel !== 0 || dbBin.status !== 'ACTIVE') {
-            throw new Error('Associated bin was not emptied/reset upon pickup completion');
+            throw new Error(
+              'Associated bin was not emptied/reset upon pickup completion',
+            );
           }
 
           // Verify EcoPoints awarded
@@ -633,7 +788,10 @@ export class SimulationService {
             _sum: { points: true },
           });
 
-          await addLog('INFO', `Pickup completed. User total EcoPoints balance is now: ${userPoints._sum.points || 0}`);
+          await addLog(
+            'INFO',
+            `Pickup completed. User total EcoPoints balance is now: ${userPoints._sum.points || 0}`,
+          );
         },
       },
       {
@@ -647,14 +805,19 @@ export class SimulationService {
           );
 
           if (payRes.status !== 201 || !payRes.data.success) {
-            throw new Error(`Payment initiation failed: ${JSON.stringify(payRes.data)}`);
+            throw new Error(
+              `Payment initiation failed: ${JSON.stringify(payRes.data)}`,
+            );
           }
 
           const paymentId = payRes.data.data.paymentId;
           transactionRef = payRes.data.data.transactionRef;
           createdRecords.payments.push(paymentId);
 
-          await addLog('INFO', `Payment initiated. Ref: ${transactionRef}. ID: ${paymentId}`);
+          await addLog(
+            'INFO',
+            `Payment initiated. Ref: ${transactionRef}. ID: ${paymentId}`,
+          );
 
           // Trigger webhook simulation (MTN MoMo callback)
           const callbackRes = await client.post('/payments/webhook/momo', {
@@ -669,15 +832,22 @@ export class SimulationService {
           }
 
           // Verify status in DB
-          const dbPayment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+          const dbPayment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+          });
           if (!dbPayment) {
             throw new Error('Payment not found in database');
           }
           if (dbPayment.status !== 'COMPLETED') {
-            throw new Error(`Expected payment status COMPLETED, got ${dbPayment.status}`);
+            throw new Error(
+              `Expected payment status COMPLETED, got ${dbPayment.status}`,
+            );
           }
 
-          await addLog('INFO', `Simulated MoMo payment verified COMPLETED in database.`);
+          await addLog(
+            'INFO',
+            `Simulated MoMo payment verified COMPLETED in database.`,
+          );
         },
       },
       {
@@ -720,7 +890,10 @@ export class SimulationService {
           const rand = Math.floor(1000000 + Math.random() * 9000000);
           userPhone = `+1999${rand}`;
 
-          await client.post('/auth/otp/send', { phone: userPhone, isLogin: false });
+          await client.post('/auth/otp/send', {
+            phone: userPhone,
+            isLogin: false,
+          });
           const verifyRes = await client.post('/auth/otp/verify', {
             phone: userPhone,
             otp: '123456',
@@ -731,7 +904,10 @@ export class SimulationService {
           userId = verifyRes.data.data.user.id;
           createdRecords.users.push(userId);
 
-          await addLog('INFO', `Simulated user registered with phone: ${userPhone}`);
+          await addLog(
+            'INFO',
+            `Simulated user registered with phone: ${userPhone}`,
+          );
         },
       },
       {
@@ -757,13 +933,18 @@ export class SimulationService {
           );
 
           if (pickupRes.status !== 201 || !pickupRes.data.success) {
-            throw new Error(`Manual pickup schedule failed: ${JSON.stringify(pickupRes.data)}`);
+            throw new Error(
+              `Manual pickup schedule failed: ${JSON.stringify(pickupRes.data)}`,
+            );
           }
 
           const pickupId = pickupRes.data.data.id;
           createdRecords.pickups.push(pickupId);
 
-          await addLog('INFO', `Manual pickup scheduled. Ref: ${pickupRes.data.data.reference}`);
+          await addLog(
+            'INFO',
+            `Manual pickup scheduled. Ref: ${pickupRes.data.data.reference}`,
+          );
         },
       },
     ];
@@ -840,9 +1021,14 @@ export class SimulationService {
           const r1 = await client.get('/health');
           if (r1.status !== 200) throw new Error('Health check failed');
 
-          const r2 = await client.post('/auth/otp/send', { phone: 'invalid', isLogin: true });
+          const r2 = await client.post('/auth/otp/send', {
+            phone: 'invalid',
+            isLogin: true,
+          });
           if (r2.status !== 400) {
-            throw new Error(`Expected status 400 for invalid phone format, got ${r2.status}`);
+            throw new Error(
+              `Expected status 400 for invalid phone format, got ${r2.status}`,
+            );
           }
 
           await addLog('INFO', 'Public API validations completed.');
@@ -887,14 +1073,21 @@ export class SimulationService {
           });
 
           if (!dbUser) {
-            throw new Error(`User not found in DB after registration. ID: ${userId}`);
+            throw new Error(
+              `User not found in DB after registration. ID: ${userId}`,
+            );
           }
 
           if (dbUser.phone !== userPhone) {
-            throw new Error(`Data mismatch: API returned phone ${userPhone}, DB has ${dbUser.phone}`);
+            throw new Error(
+              `Data mismatch: API returned phone ${userPhone}, DB has ${dbUser.phone}`,
+            );
           }
 
-          await addLog('INFO', `Database user sync verified. Phone: ${dbUser.phone}`);
+          await addLog(
+            'INFO',
+            `Database user sync verified. Phone: ${dbUser.phone}`,
+          );
         },
       },
     ];
@@ -914,9 +1107,14 @@ export class SimulationService {
         run: async () => {
           const res = await client.get('/users/me'); // No auth header
           if (res.status !== 401) {
-            throw new Error(`Expected status 401 for unauthenticated request, got ${res.status}`);
+            throw new Error(
+              `Expected status 401 for unauthenticated request, got ${res.status}`,
+            );
           }
-          await addLog('INFO', 'Unauthorized request successfully rejected with 401.');
+          await addLog(
+            'INFO',
+            'Unauthorized request successfully rejected with 401.',
+          );
         },
       },
       {
@@ -925,9 +1123,14 @@ export class SimulationService {
           // Missing required fields
           const res = await client.post('/auth/otp/send', {});
           if (res.status !== 400) {
-            throw new Error(`Expected status 400 for empty body, got ${res.status}`);
+            throw new Error(
+              `Expected status 400 for empty body, got ${res.status}`,
+            );
           }
-          await addLog('INFO', 'Empty request payload successfully rejected with 400.');
+          await addLog(
+            'INFO',
+            'Empty request payload successfully rejected with 400.',
+          );
         },
       },
     ];

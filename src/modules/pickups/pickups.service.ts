@@ -63,7 +63,9 @@ export class PickupsService {
   // ─── CREATE PICKUP ──────────────────────────────
 
   async createPickup(userId: string, dto: CreatePickupDto) {
-    const scheduledDate = dto.scheduledDate ? new Date(dto.scheduledDate) : new Date();
+    const scheduledDate = dto.scheduledDate
+      ? new Date(dto.scheduledDate)
+      : new Date();
 
     // Validate bin belongs to user (if provided)
     if (dto.binId) {
@@ -78,26 +80,30 @@ export class PickupsService {
       }
       // Synchronize location coordinates to bin
       if (dto.latitude && dto.longitude) {
-        await this.prisma.bin.update({
-          where: { id: dto.binId },
-          data: {
-            latitude: dto.latitude,
-            longitude: dto.longitude,
-          },
-        }).catch(() => {});
+        await this.prisma.bin
+          .update({
+            where: { id: dto.binId },
+            data: {
+              latitude: dto.latitude,
+              longitude: dto.longitude,
+            },
+          })
+          .catch(() => {});
       }
     }
 
     // Synchronize user default location
     if (dto.latitude && dto.longitude) {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          homeLatitude: dto.latitude,
-          homeLongitude: dto.longitude,
-          ...(dto.address ? { defaultAddress: dto.address } : {}),
-        },
-      }).catch(() => {});
+      await this.prisma.user
+        .update({
+          where: { id: userId },
+          data: {
+            homeLatitude: dto.latitude,
+            homeLongitude: dto.longitude,
+            ...(dto.address ? { defaultAddress: dto.address } : {}),
+          },
+        })
+        .catch(() => {});
     }
 
     // Generate unique reference

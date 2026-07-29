@@ -13,9 +13,11 @@ describe('PickupsService', () => {
   const prisma = {
     bin: {
       findUnique: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
     },
     user: {
       findUnique: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
     },
     collectorProfile: {
       findMany: jest.fn(),

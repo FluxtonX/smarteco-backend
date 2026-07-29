@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, IsDateString, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsDateString,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class KioskHeartbeatDto {
   @ApiPropertyOptional({ example: 'online' })
