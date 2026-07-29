@@ -30,6 +30,7 @@ import {
   ApproveCollectorDto,
   UpdateBinAdminDto,
   CreateAdminUserDto,
+  AssignBinCollectorDto,
 } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
@@ -137,6 +138,18 @@ export class AdminController {
   })
   async getBins() {
     return this.adminService.getBins();
+  }
+
+  @Post('bins/assign')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Assign collector to a smart bin',
+    description: 'Assign a dispatch collector to a smart bin directly. Admin only.',
+  })
+  @ApiResponse({ status: 200, description: 'Collector assigned to bin successfully' })
+  @ApiResponse({ status: 404, description: 'Bin or Collector profile not found' })
+  async assignBinCollector(@Body() dto: AssignBinCollectorDto) {
+    return this.adminService.assignBinCollector(dto);
   }
 
   @Patch('bins/:id')

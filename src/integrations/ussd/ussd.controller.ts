@@ -9,6 +9,7 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { UssdService } from './ussd.service';
+import { Public } from '../../modules/auth/decorators/public.decorator';
 
 @ApiTags('USSD')
 @Controller('ussd')
@@ -16,6 +17,7 @@ export class UssdController {
   constructor(private readonly ussdService: UssdService) {}
 
   @Post('callback')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'USSD callback endpoint',
