@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsBoolean } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsBoolean,
+} from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class CreateAdminUserDto {
@@ -13,7 +20,10 @@ export class CreateAdminUserDto {
   @IsNotEmpty()
   lastName: string;
 
-  @ApiProperty({ description: 'Email address', example: 'ops.manager@smarteco.rw' })
+  @ApiProperty({
+    description: 'Email address',
+    example: 'ops.manager@smarteco.rw',
+  })
   @IsEmail()
   @IsOptional()
   email?: string;
@@ -28,12 +38,19 @@ export class CreateAdminUserDto {
   @IsOptional()
   password?: string;
 
-  @ApiProperty({ description: 'User role', enum: UserRole, example: UserRole.ADMIN })
+  @ApiProperty({
+    description: 'User role',
+    enum: UserRole,
+    example: UserRole.ADMIN,
+  })
   @IsEnum(UserRole)
   @IsOptional()
   role?: UserRole;
 
-  @ApiProperty({ description: 'Sub role (e.g. Finance Admin, Operations Manager)', example: 'Finance Admin' })
+  @ApiProperty({
+    description: 'Sub role (e.g. Finance Admin, Operations Manager)',
+    example: 'Finance Admin',
+  })
   @IsString()
   @IsOptional()
   subRole?: string;

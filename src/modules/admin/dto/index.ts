@@ -6,4 +6,3 @@ export { ApproveCollectorDto } from './approve-collector.dto';
 export { UpdateBinAdminDto } from './update-bin-admin.dto';
 export { CreateAdminUserDto } from './create-admin-user.dto';
 export { AssignBinCollectorDto } from './assign-bin-collector.dto';
-

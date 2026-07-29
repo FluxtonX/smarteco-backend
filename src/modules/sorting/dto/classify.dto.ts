@@ -17,7 +17,8 @@ import { SortingCategory } from '@prisma/client';
 
 export class SingleClassifyEventDto {
   @ApiProperty({
-    description: 'Unique key to identify this event and prevent duplicate processing.',
+    description:
+      'Unique key to identify this event and prevent duplicate processing.',
     example: 'kiosk-01-uuid-123456789',
   })
   @IsString()

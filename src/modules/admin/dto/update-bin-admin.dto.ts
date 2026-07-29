@@ -1,10 +1,18 @@
-import { IsOptional, IsString, IsNumber, IsEnum, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsEnum,
+  Min,
+  Max,
+} from 'class-validator';
 import { BinStatus, WasteType } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateBinAdminDto {
   @ApiPropertyOptional({
-    description: 'The physical Device EUI / sensor ID to map to this bin. Pass an empty string to unlink.',
+    description:
+      'The physical Device EUI / sensor ID to map to this bin. Pass an empty string to unlink.',
     example: '24e124c0002a3f01',
   })
   @IsOptional()
@@ -12,7 +20,8 @@ export class UpdateBinAdminDto {
   deviceId?: string;
 
   @ApiPropertyOptional({
-    description: 'Empty height calibration in millimeters (distance from sensor to empty bottom).',
+    description:
+      'Empty height calibration in millimeters (distance from sensor to empty bottom).',
     example: 1200,
     minimum: 100,
     maximum: 5000,
@@ -24,7 +33,8 @@ export class UpdateBinAdminDto {
   emptyHeightMm?: number;
 
   @ApiPropertyOptional({
-    description: 'Full height calibration threshold in millimeters (height at which bin is considered 100% full).',
+    description:
+      'Full height calibration threshold in millimeters (height at which bin is considered 100% full).',
     example: 200,
     minimum: 0,
     maximum: 1000,

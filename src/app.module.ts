@@ -27,7 +27,10 @@ import { SimulationModule } from './modules/simulation/simulation.module';
 import { SimulationMiddleware } from './modules/simulation/simulation.middleware';
 import { AuthzModule } from './authz/authz.module';
 import { AbilityFactory, PolicyGuard } from './authz/policy';
-import { FieldMaskInterceptor, AuthzAuditInterceptor } from './authz/interceptors';
+import {
+  FieldMaskInterceptor,
+  AuthzAuditInterceptor,
+} from './authz/interceptors';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 
 @Module({

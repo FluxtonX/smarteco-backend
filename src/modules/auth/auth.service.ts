@@ -120,7 +120,10 @@ export class AuthService {
 
     // Verify OTP via Twilio Verify
     let verification: { valid: boolean; status: string };
-    if ((phone === this.mockPhoneNumber && otp === this.mockOtp) || (phone.startsWith('+1999') && otp === '123456')) {
+    if (
+      (phone === this.mockPhoneNumber && otp === this.mockOtp) ||
+      (phone.startsWith('+1999') && otp === '123456')
+    ) {
       this.logger.log(
         `Bypassing Twilio OTP verification for mock/simulation phone number: ${phone}`,
       );
@@ -682,10 +685,7 @@ export class AuthService {
     // Search if the user exists
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { phone },
-          ...(email ? [{ email }] : []),
-        ],
+        OR: [{ phone }, ...(email ? [{ email }] : [])],
       },
     });
 
@@ -700,12 +700,14 @@ export class AuthService {
       },
     });
 
-    this.logger.log(`Account deletion request received for: ${phone} / ${email || 'no-email'}`);
+    this.logger.log(
+      `Account deletion request received for: ${phone} / ${email || 'no-email'}`,
+    );
 
     return {
       success: true,
-      message: 'Your deletion request has been received. Our support team will process it after verifying your identity.',
+      message:
+        'Your deletion request has been received. Our support team will process it after verifying your identity.',
     };
   }
 }
-
