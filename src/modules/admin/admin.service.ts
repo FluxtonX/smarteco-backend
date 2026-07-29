@@ -262,7 +262,9 @@ export class AdminService {
     });
 
     if (existing) {
-      throw new ConflictException('User or admin account with this phone or email already exists');
+      throw new ConflictException(
+        'User or admin account with this phone or email already exists',
+      );
     }
 
     const newUser = await this.prisma.user.create({
@@ -515,7 +517,8 @@ export class AdminService {
 
     if (!bin) {
       const defaultUser = await this.prisma.user.findFirst();
-      if (!defaultUser) throw new NotFoundException('No users found in database.');
+      if (!defaultUser)
+        throw new NotFoundException('No users found in database.');
       bin = await this.prisma.bin.create({
         data: {
           userId: defaultUser.id,
@@ -540,9 +543,11 @@ export class AdminService {
 
     if (!collector) {
       const collectorUser =
-        (await this.prisma.user.findFirst({ where: { role: UserRole.COLLECTOR } })) ||
-        (await this.prisma.user.findFirst());
-      if (!collectorUser) throw new NotFoundException('No collector user found.');
+        (await this.prisma.user.findFirst({
+          where: { role: UserRole.COLLECTOR },
+        })) || (await this.prisma.user.findFirst());
+      if (!collectorUser)
+        throw new NotFoundException('No collector user found.');
 
       collector = await this.prisma.collectorProfile.create({
         data: {
@@ -610,7 +615,6 @@ export class AdminService {
       },
     };
   }
-
 
   async updateBin(binId: string, dto: UpdateBinAdminDto) {
     const bin = await this.prisma.bin.findUnique({
@@ -1513,4 +1517,3 @@ export class AdminService {
     };
   }
 }
-

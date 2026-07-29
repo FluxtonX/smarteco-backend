@@ -18,11 +18,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { SortingService } from './sorting.service';
-import {
-  ClassifyDto,
-  KioskHeartbeatDto,
-  SortingEventQueryDto,
-} from './dto';
+import { ClassifyDto, KioskHeartbeatDto, SortingEventQueryDto } from './dto';
 import { KioskAuthGuard } from './guards/kiosk-auth.guard';
 import { JwtAuthGuard } from '../auth/guards';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -51,7 +47,10 @@ export class SortingController {
   @ApiBearerAuth('Kiosk-auth')
   async classify(@Body() dto: ClassifyDto, @Req() req: any) {
     const kiosk = req.kiosk;
-    return this.sortingService.processClassificationBatch(kiosk.kioskId, dto.events);
+    return this.sortingService.processClassificationBatch(
+      kiosk.kioskId,
+      dto.events,
+    );
   }
 
   // ─── KIOSK HEARTBEAT ─────────────────────────────
@@ -101,7 +100,7 @@ export class SortingController {
   @ApiOperation({
     summary: "Retrieve user's EcoPoints ledger and tier status",
     description:
-      "Returns a complete transaction log, current EcoPoints balance, and current tier status for the specified user.",
+      'Returns a complete transaction log, current EcoPoints balance, and current tier status for the specified user.',
   })
   @ApiParam({ name: 'userId', description: 'Target user UUID' })
   @ApiResponse({

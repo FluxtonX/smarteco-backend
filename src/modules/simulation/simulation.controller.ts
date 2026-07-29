@@ -37,7 +37,8 @@ export class SimulationController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Start a business simulation scenario',
-    description: 'Trigger a simulation run in the background. Super Admin only.',
+    description:
+      'Trigger a simulation run in the background. Super Admin only.',
   })
   @ApiResponse({ status: 200, description: 'Simulation started successfully' })
   @ApiResponse({ status: 403, description: 'Super Admin access required' })
@@ -51,9 +52,13 @@ export class SimulationController {
   @Get('sessions')
   @ApiOperation({
     summary: 'List all simulation sessions',
-    description: 'Get list of previous and running simulations. Super Admin only.',
+    description:
+      'Get list of previous and running simulations. Super Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'Simulation sessions list retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Simulation sessions list retrieved',
+  })
   async getSessions() {
     return this.simulationService.getSessions();
   }
@@ -61,10 +66,14 @@ export class SimulationController {
   @Get('sessions/:id')
   @ApiOperation({
     summary: 'Get details of a specific simulation session',
-    description: 'Check progress, logs, and final results of a simulation. Super Admin only.',
+    description:
+      'Check progress, logs, and final results of a simulation. Super Admin only.',
   })
   @ApiParam({ name: 'id', description: 'Simulation Session UUID' })
-  @ApiResponse({ status: 200, description: 'Simulation session details retrieved' })
+  @ApiResponse({
+    status: 200,
+    description: 'Simulation session details retrieved',
+  })
   @ApiResponse({ status: 404, description: 'Session not found' })
   async getSession(@Param('id', ParseUUIDPipe) id: string) {
     return this.simulationService.getSession(id);
@@ -77,7 +86,10 @@ export class SimulationController {
     description: 'Abort a running simulation scenario. Super Admin only.',
   })
   @ApiParam({ name: 'id', description: 'Simulation Session UUID' })
-  @ApiResponse({ status: 200, description: 'Simulation cancelled successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Simulation cancelled successfully',
+  })
   async cancelSimulation(@Param('id', ParseUUIDPipe) id: string) {
     return this.simulationService.cancelSimulation(id);
   }
@@ -86,10 +98,14 @@ export class SimulationController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Clear all simulation-created records',
-    description: 'Delete all records associated with this simulation context. Super Admin only.',
+    description:
+      'Delete all records associated with this simulation context. Super Admin only.',
   })
   @ApiParam({ name: 'id', description: 'Simulation Session UUID' })
-  @ApiResponse({ status: 200, description: 'Simulation data cleared successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Simulation data cleared successfully',
+  })
   async clearSimulationData(@Param('id', ParseUUIDPipe) id: string) {
     return this.simulationService.clearSimulationData(id);
   }

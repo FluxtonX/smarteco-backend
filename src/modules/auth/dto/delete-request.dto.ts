@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, Matches, IsOptional, IsEmail } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  Matches,
+  IsOptional,
+  IsEmail,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class DeleteRequestDto {
@@ -25,7 +31,8 @@ export class DeleteRequestDto {
   @IsString()
   @IsNotEmpty()
   @Matches(/^\+[1-9]\d{1,14}$/, {
-    message: 'Phone number must be in valid international format (e.g., +250XXXXXXXXX)',
+    message:
+      'Phone number must be in valid international format (e.g., +250XXXXXXXXX)',
   })
   phone: string;
 
