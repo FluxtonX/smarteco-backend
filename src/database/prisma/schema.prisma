@@ -173,6 +173,7 @@ model User {
   refreshTokens    RefreshToken[]
   sortingEvents    SortingEvent[]
   ecoPointsLedger  EcoPointsLedger[]
+  userRoles        UserRoleGrant[]
 
   @@map("users")
 }
@@ -632,4 +633,98 @@ model SimulationSession {
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@map("simulation_sessions")
+}
+
+// ─── RBAC & AUTHORIZATION MODELS ─────────────────
+
+enum RoleKey {
+  OPERATIONS_MANAGER
+  FINANCE_ADMIN
+  IOT_SUPERVISOR
+  SUPPORT_AGENT
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  key         RoleKey          @unique
+  name        String
+  description String?
+  permissions RolePermission[]
+  assignments UserRoleGrant[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@map("roles")
+}
+
+model Permission {
+  id       String           @id @default(uuid())
+  slug     String           @unique   // e.g. "refund:create"
+  resource String
+  action   String
+  roles    RolePermission[]
+
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRoleGrant {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  roleId    String    @map("role_id")
+  orgId     String    @map("org_id")                       // tenant scope of the grant
+  expiresAt DateTime? @map("expires_at")                   // time-boxed elevation / break-glass
+  grantedBy String    @map("granted_by")
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId, orgId])
+  @@index([orgId])
+  @@map("user_roles")
+}
+
+model ApprovalRequest {
+  id          String    @id @default(uuid())
+  subject     String                     // "Refund", "Tariff", "ModelVersion"...
+  action      String
+  payload     Json
+  reason      String
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  requestedBy String    @map("requested_by")
+  approvedBy  String?   @map("approved_by")                 // must differ from requestedBy
+  orgId       String    @map("org_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+
+  @@index([status, orgId])
+  @@map("approval_requests")
+}
+
+model AuthzAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String   @map("actor_id")
+  orgId      String   @map("org_id")
+  domain     String                      // operations | finance | device | support
+  subject    String
+  action     String
+  targetId   String?  @map("target_id")
+  outcome    String                      // ALLOW | DENY | STEP_UP | QUEUED
+  reason     String?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("authz_audit_logs")
 }
