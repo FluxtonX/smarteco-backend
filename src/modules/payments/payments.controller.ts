@@ -94,10 +94,11 @@ export class PaymentsController {
   })
   @ApiResponse({ status: 200, description: 'Payment history retrieved' })
   async getPaymentHistory(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: any,
     @Query() query: PaginationDto,
   ) {
-    return this.paymentsService.getPaymentHistory(userId, query);
+    const targetUserId = user?.role === 'ADMIN' ? undefined : user?.id;
+    return this.paymentsService.getPaymentHistory(targetUserId, query);
   }
 
   // ─── WEBHOOKS (No Auth — callbacks from payment providers) ──

@@ -142,6 +142,7 @@ model User {
   email          String?  @unique
   firstName      String?  @map("first_name")
   lastName       String?  @map("last_name")
+  subRole        String?  @map("sub_role")
   userType       UserType @default(RESIDENTIAL) @map("user_type")
   role           UserRole @default(USER)
   referralCode   String?  @unique @map("referral_code")
@@ -154,6 +155,7 @@ model User {
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+  simulationId   String?  @map("simulation_id")
 
   // Relations
   pickups          Pickup[]
@@ -169,6 +171,9 @@ model User {
   referrer         User?                 @relation("Referrals", fields: [referredBy], references: [id])
   collectorProfile CollectorProfile?
   refreshTokens    RefreshToken[]
+  sortingEvents    SortingEvent[]
+  ecoPointsLedger  EcoPointsLedger[]
+  userRoles        UserRoleGrant[]
 
   @@map("users")
 }
@@ -197,6 +202,7 @@ model OtpVerification {
   verified  Boolean  @default(false)
   attempts  Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
+  simulationId String? @map("simulation_id")
 
   @@index([phone, otp])
   @@index([phone, createdAt])
@@ -225,6 +231,7 @@ model CollectorProfile {
   longitude          Float?
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+  simulationId       String?   @map("simulation_id")
 
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -252,6 +259,7 @@ model Pickup {
   cancelReason  String?      @map("cancel_reason")
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
+  simulationId  String?      @map("simulation_id")
 
   // Relations
   user      User              @relation(fields: [userId], references: [id])
@@ -282,12 +290,14 @@ model Bin {
   updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
   emptyHeightMm Int       @default(1200) @map("empty_height_mm")
   fullHeightMm  Int       @default(200) @map("full_height_mm")
+  simulationId  String?   @map("simulation_id")
 
   // Relations
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   pickups        Pickup[]
   iotDevice      IotDevice?
   iotTelemetries IotTelemetry[]
+  sortingEvents  SortingEvent[]
 
   @@index([userId])
   @@index([qrCode])
@@ -346,6 +356,7 @@ model EcoPointTransaction {
   description String?
   pickupId    String?  @map("pickup_id")
   createdAt   DateTime @default(now()) @map("created_at")
+  simulationId String? @map("simulation_id")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -371,6 +382,7 @@ model Payment {
   failReason     String?       @map("fail_reason")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at")
+  simulationId   String?       @map("simulation_id")
 
   // Relations
   pickup      Pickup              @relation(fields: [pickupId], references: [id])
@@ -411,6 +423,7 @@ model Notification {
   data   Json?
   isRead Boolean          @default(false) @map("is_read")
   sentAt DateTime         @default(now()) @map("sent_at")
+  simulationId String?    @map("simulation_id")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -432,6 +445,7 @@ model CommunicationLog {
   metadata    Json?
   providerRef String?                @map("provider_ref")
   createdAt   DateTime               @default(now()) @map("created_at")
+  simulationId String?               @map("simulation_id")
 
   @@index([channel])
   @@index([direction])
@@ -456,6 +470,7 @@ model Redemption {
   failReason  String?          @map("fail_reason")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at")
+  simulationId String?         @map("simulation_id")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -480,6 +495,7 @@ model SupportDispute {
   createdAt   DateTime               @default(now()) @map("created_at")
   updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at")
   resolvedAt  DateTime?              @map("resolved_at")
+  simulationId String?               @map("simulation_id")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -500,6 +516,7 @@ model AuditLog {
   status    AuditStatus @default(SUCCESS)
   metadata  Json?
   createdAt DateTime    @default(now()) @map("created_at")
+  simulationId String?  @map("simulation_id")
 
   actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
 
@@ -520,4 +537,194 @@ model SystemSetting {
 
   @@index([key])
   @@map("system_settings")
+}
+
+// ─── AI VISUAL SORTING KIOSK MODELS ────────────────
+
+enum SortingCategory {
+  PLASTIC
+  PAPER
+  METAL
+  GLASS
+  ORGANIC
+  GENERAL
+  RECYCLABLE
+  RECYCLE
+  COMPOST
+  E_WASTE
+  LANDFILL
+  HAZARDOUS
+}
+
+model Kiosk {
+  id          String   @id @default(uuid())
+  kioskId     String   @unique @map("kiosk_id")
+  name        String?
+  location    String?
+  status      String   @default("ACTIVE")
+  apiKey      String?  @unique @map("api_key")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  sortingEvents SortingEvent[]
+
+  @@map("kiosks")
+}
+
+model SortingEvent {
+  id             String          @id @default(uuid())
+  kioskId        String          @map("kiosk_id")
+  category       SortingCategory
+  confidence     Float
+  capturedAt     DateTime        @map("captured_at")
+  syncedAt       DateTime        @default(now()) @map("synced_at")
+  idempotencyKey String          @unique @map("idempotency_key")
+  userId         String?         @map("user_id")
+  binId          String?         @map("bin_id")
+  simulationId   String?         @map("simulation_id")
+
+  // Relations
+  kiosk        Kiosk             @relation(fields: [kioskId], references: [kioskId], onDelete: Cascade)
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bin          Bin?              @relation(fields: [binId], references: [id], onDelete: SetNull)
+  ledgerRecord EcoPointsLedger[]
+
+  @@index([kioskId])
+  @@index([userId])
+  @@index([binId])
+  @@index([idempotencyKey])
+  @@map("sorting_events")
+}
+
+model EcoPointsLedger {
+  id             String      @id @default(uuid())
+  userId         String      @map("user_id")
+  sortingEventId String?     @map("sorting_event_id")
+  pointsAwarded  Int         @map("points_awarded")
+  runningBalance Int         @map("running_balance")
+  tier           EcoTier     @default(ECO_STARTER)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  simulationId   String?     @map("simulation_id")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sortingEvent SortingEvent? @relation(fields: [sortingEventId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sortingEventId])
+  @@index([createdAt])
+  @@map("ecopoints_ledger")
+}
+
+model SimulationSession {
+  id             String    @id @default(uuid())
+  startedBy      String    @map("started_by")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  status         String    // PENDING, RUNNING, PASSED, FAILED, CANCELLED, CLEARED
+  scenario       String    // full_e2e, user_flow, admin_flow, api_flow, db_sync, error_handling
+  logs           Json[]    // Array of log entries: { timestamp: string, level: string, message: string }
+  progress       Int       @default(0) // Progress percentage (0 - 100)
+  completedSteps Int       @default(0) @map("completed_steps")
+  totalSteps     Int       @default(0) @map("total_steps")
+  errors         Json[]    // Detailed errors
+  finalResult    Json?     @map("final_result") // Summary report
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("simulation_sessions")
+}
+
+// ─── RBAC & AUTHORIZATION MODELS ─────────────────
+
+enum RoleKey {
+  OPERATIONS_MANAGER
+  FINANCE_ADMIN
+  IOT_SUPERVISOR
+  SUPPORT_AGENT
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  key         RoleKey          @unique
+  name        String
+  description String?
+  permissions RolePermission[]
+  assignments UserRoleGrant[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@map("roles")
+}
+
+model Permission {
+  id       String           @id @default(uuid())
+  slug     String           @unique   // e.g. "refund:create"
+  resource String
+  action   String
+  roles    RolePermission[]
+
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRoleGrant {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  roleId    String    @map("role_id")
+  orgId     String    @map("org_id")                       // tenant scope of the grant
+  expiresAt DateTime? @map("expires_at")                   // time-boxed elevation / break-glass
+  grantedBy String    @map("granted_by")
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId, orgId])
+  @@index([orgId])
+  @@map("user_roles")
+}
+
+model ApprovalRequest {
+  id          String    @id @default(uuid())
+  subject     String                     // "Refund", "Tariff", "ModelVersion"...
+  action      String
+  payload     Json
+  reason      String
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  requestedBy String    @map("requested_by")
+  approvedBy  String?   @map("approved_by")                 // must differ from requestedBy
+  orgId       String    @map("org_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+
+  @@index([status, orgId])
+  @@map("approval_requests")
+}
+
+model AuthzAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String   @map("actor_id")
+  orgId      String   @map("org_id")
+  domain     String                      // operations | finance | device | support
+  subject    String
+  action     String
+  targetId   String?  @map("target_id")
+  outcome    String                      // ALLOW | DENY | STEP_UP | QUEUED
+  reason     String?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("authz_audit_logs")
 }

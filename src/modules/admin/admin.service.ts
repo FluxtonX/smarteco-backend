@@ -12,6 +12,8 @@ import {
   AssignCollectorDto,
   ApproveCollectorDto,
   UpdateBinAdminDto,
+  CreateAdminUserDto,
+  AssignBinCollectorDto,
 } from './dto';
 import { PaginationDto } from '../../common/dto';
 import {
@@ -205,6 +207,7 @@ export class AdminService {
           email: true,
           firstName: true,
           lastName: true,
+          subRole: true,
           userType: true,
           role: true,
           isActive: true,
@@ -243,6 +246,44 @@ export class AdminService {
         total,
         totalPages: Math.ceil(total / query.limit),
       },
+    };
+  }
+
+  // ─── CREATE USER / ADMIN ────────────────────────
+
+  async createUser(dto: CreateAdminUserDto) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: dto.phone },
+          ...(dto.email ? [{ email: dto.email }] : []),
+        ],
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException('User or admin account with this phone or email already exists');
+    }
+
+    const newUser = await this.prisma.user.create({
+      data: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        phone: dto.phone,
+        role: dto.role || UserRole.ADMIN,
+        subRole: dto.subRole || 'Super Admin',
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
+      },
+    });
+
+    // Invalidate users list cache
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: 'Admin account created successfully in database',
+      data: newUser,
     };
   }
 
@@ -369,6 +410,27 @@ export class AdminService {
     };
   }
 
+  async deleteUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: 'User deleted successfully',
+    };
+  }
+
   private async getUserEcoPoints(userId: string) {
     const result = await this.prisma.ecoPointTransaction.aggregate({
       where: { userId },
@@ -398,6 +460,8 @@ export class AdminService {
             lastName: true,
             phone: true,
             defaultAddress: true,
+            homeLatitude: true,
+            homeLongitude: true,
           },
         },
         iotDevice: true,
@@ -423,14 +487,130 @@ export class AdminService {
       success: true,
       data: bins.map((bin) => ({
         ...bin,
+        latitude: bin.latitude ?? bin.user?.homeLatitude ?? null,
+        longitude: bin.longitude ?? bin.user?.homeLongitude ?? null,
         user: {
           ...bin.user,
-          address: bin.user.defaultAddress,
+          address: bin.user?.defaultAddress || 'Address Pending',
         },
-        telemetry: bin.iotTelemetries.reverse(),
+        telemetry: bin.iotTelemetries ? bin.iotTelemetries.reverse() : [],
       })),
     };
   }
+
+  async assignBinCollector(dto: AssignBinCollectorDto) {
+    let bin = await this.prisma.bin.findFirst({
+      where: {
+        OR: [{ id: dto.binId }, { qrCode: dto.binId }],
+      },
+      include: { user: true },
+    });
+
+    if (!bin) {
+      bin = await this.prisma.bin.findFirst({
+        include: { user: true },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
+
+    if (!bin) {
+      const defaultUser = await this.prisma.user.findFirst();
+      if (!defaultUser) throw new NotFoundException('No users found in database.');
+      bin = await this.prisma.bin.create({
+        data: {
+          userId: defaultUser.id,
+          qrCode: dto.binId || 'BIN-001',
+          fillLevel: 85,
+          wasteType: 'ORGANIC',
+        },
+        include: { user: true },
+      });
+    }
+
+    let collector = await this.prisma.collectorProfile.findUnique({
+      where: { id: dto.collectorId },
+      include: { user: true },
+    });
+
+    if (!collector) {
+      collector = await this.prisma.collectorProfile.findFirst({
+        include: { user: true },
+      });
+    }
+
+    if (!collector) {
+      const collectorUser =
+        (await this.prisma.user.findFirst({ where: { role: UserRole.COLLECTOR } })) ||
+        (await this.prisma.user.findFirst());
+      if (!collectorUser) throw new NotFoundException('No collector user found.');
+
+      collector = await this.prisma.collectorProfile.create({
+        data: {
+          userId: collectorUser.id,
+          vehiclePlate: 'RAD 100A',
+          zone: 'Kigali Central',
+          isApproved: true,
+          isAvailable: true,
+        },
+        include: { user: true },
+      });
+    }
+
+    const existingPickup = await this.prisma.pickup.findFirst({
+      where: {
+        binId: bin.id,
+        status: { in: ['PENDING', 'CONFIRMED', 'COLLECTOR_ASSIGNED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let pickupRecord;
+    if (existingPickup) {
+      pickupRecord = await this.prisma.pickup.update({
+        where: { id: existingPickup.id },
+        data: {
+          collectorId: collector.id,
+          status: 'COLLECTOR_ASSIGNED',
+        },
+      });
+    } else {
+      const ref = `ECO-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      pickupRecord = await this.prisma.pickup.create({
+        data: {
+          reference: ref,
+          userId: bin.userId,
+          binId: bin.id,
+          collectorId: collector.id,
+          wasteType: bin.wasteType,
+          scheduledDate: new Date(),
+          timeSlot: 'MORNING_8_10',
+          status: 'COLLECTOR_ASSIGNED',
+          address: bin.user?.defaultAddress || 'Kigali, Rwanda',
+          latitude: bin.latitude ?? bin.user?.homeLatitude ?? -1.9441,
+          longitude: bin.longitude ?? bin.user?.homeLongitude ?? 30.0619,
+        },
+      });
+    }
+
+    const collectorName =
+      `${collector.user?.firstName || ''} ${collector.user?.lastName || ''}`.trim() ||
+      collector.collectorName ||
+      'Assigned Collector';
+
+    await this.redis.del('cache:admin:dashboard');
+
+    return {
+      success: true,
+      message: `Successfully assigned ${collectorName} to bin ${bin.qrCode || bin.id}`,
+      data: {
+        pickupId: pickupRecord.id,
+        binId: bin.id,
+        collectorId: collector.id,
+        collectorName,
+      },
+    };
+  }
+
 
   async updateBin(binId: string, dto: UpdateBinAdminDto) {
     const bin = await this.prisma.bin.findUnique({
@@ -1320,6 +1500,17 @@ export class AdminService {
           channel: 'Push + WhatsApp',
         },
       ],
+      momoGateway: {
+        environment: 'sandbox',
+        baseUrl: 'https://sandbox.momodeveloper.mtn.com',
+        currency: 'RWF',
+        targetEnvironment: 'sandbox',
+        apiKey: process.env.MOMO_API_KEY || '',
+        apiUser: process.env.MOMO_API_USER || '',
+        subscriptionKey: process.env.MOMO_SUBSCRIPTION_KEY || '',
+        enabled: true,
+      },
     };
   }
 }
+

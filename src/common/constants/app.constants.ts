@@ -34,10 +34,27 @@ export const ECOPOINTS = {
 // ─── Tier Thresholds ─────────────────────────────
 
 export const TIER_THRESHOLDS = {
-  ECO_STARTER: { min: 0, max: 999, multiplier: 1.0 },
-  ECO_WARRIOR: { min: 1000, max: 4999, multiplier: 1.25 },
-  ECO_CHAMPION: { min: 5000, max: 9999, multiplier: 1.5 },
+  ECO_STARTER: { min: 0, max: 499, multiplier: 1.0 },
+  ECO_WARRIOR: { min: 500, max: 1999, multiplier: 1.25 },
+  ECO_CHAMPION: { min: 2000, max: 9999, multiplier: 1.5 },
   ECO_LEGEND: { min: 10000, max: Infinity, multiplier: 2.0 },
+};
+
+// ─── AI Visual Sorting Points ────────────────────
+
+export const AI_SORTING_POINTS = {
+  PLASTIC: 10,
+  PAPER: 5,
+  METAL: 15,
+  GLASS: 15,
+  ORGANIC: 5,
+  GENERAL: 2,
+  RECYCLABLE: 10,
+  RECYCLE: 10,
+  COMPOST: 5,
+  E_WASTE: 20,
+  LANDFILL: 1,
+  HAZARDOUS: 15,
 };
 
 // ─── Pickup ──────────────────────────────────────

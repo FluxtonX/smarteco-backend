@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -28,6 +29,8 @@ import {
   AssignCollectorDto,
   ApproveCollectorDto,
   UpdateBinAdminDto,
+  CreateAdminUserDto,
+  AssignBinCollectorDto,
 } from './dto';
 import { PaginationDto } from '../../common/dto';
 import { JwtAuthGuard } from '../auth/guards';
@@ -116,6 +119,18 @@ export class AdminController {
     return this.adminService.getUsers(query);
   }
 
+  @Post('users')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create new user or admin account',
+    description: 'Create a new user or admin user with assigned role and sub-role directly in database. Admin only.',
+  })
+  @ApiResponse({ status: 201, description: 'User account created successfully' })
+  @ApiResponse({ status: 409, description: 'User already exists' })
+  async createUser(@Body() dto: CreateAdminUserDto) {
+    return this.adminService.createUser(dto);
+  }
+
   @Get('bins')
   @ApiOperation({
     summary: 'Get all user bins',
@@ -123,6 +138,18 @@ export class AdminController {
   })
   async getBins() {
     return this.adminService.getBins();
+  }
+
+  @Post('bins/assign')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Assign collector to a smart bin',
+    description: 'Assign a dispatch collector to a smart bin directly. Admin only.',
+  })
+  @ApiResponse({ status: 200, description: 'Collector assigned to bin successfully' })
+  @ApiResponse({ status: 404, description: 'Bin or Collector profile not found' })
+  async assignBinCollector(@Body() dto: AssignBinCollectorDto) {
+    return this.adminService.assignBinCollector(dto);
   }
 
   @Patch('bins/:id')
@@ -280,6 +307,16 @@ export class AdminController {
   @ApiParam({ name: 'id', description: 'User UUID' })
   async toggleUserStatus(@Param('id', ParseUUIDPipe) userId: string) {
     return this.adminService.toggleUserStatus(userId);
+  }
+
+  @Delete('users/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete user permanently',
+  })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  async deleteUser(@Param('id', ParseUUIDPipe) userId: string) {
+    return this.adminService.deleteUser(userId);
   }
 
   @Get('pickups')

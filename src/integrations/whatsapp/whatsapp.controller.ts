@@ -9,6 +9,7 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { WhatsAppService } from './whatsapp.service';
+import { Public } from '../../modules/auth/decorators/public.decorator';
 
 @ApiTags('WhatsApp')
 @Controller('whatsapp')
@@ -16,6 +17,7 @@ export class WhatsAppController {
   constructor(private readonly whatsAppService: WhatsAppService) {}
 
   @Post('webhook')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'WhatsApp webhook',
@@ -44,6 +46,7 @@ export class WhatsAppController {
   }
 
   @Post('send')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Send WhatsApp message',
@@ -58,6 +61,7 @@ export class WhatsAppController {
   }
 
   @Post('send-interactive-menu')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Send interactive WhatsApp menu',

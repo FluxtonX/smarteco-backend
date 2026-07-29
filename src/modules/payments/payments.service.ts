@@ -241,14 +241,26 @@ export class PaymentsService {
 
   // ─── GET PAYMENT HISTORY ────────────────────────
 
-  async getPaymentHistory(userId: string, query: PaginationDto) {
+  async getPaymentHistory(userId?: string, query?: PaginationDto) {
+    const where: Prisma.PaymentWhereInput = userId ? { userId } : {};
+    const skip = query?.skip ?? 0;
+    const limit = query?.limit ?? 50;
+
     const [payments, total] = await Promise.all([
       this.prisma.payment.findMany({
-        where: { userId },
-        skip: query.skip,
-        take: query.limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
           pickup: {
             select: {
               reference: true,
@@ -258,7 +270,7 @@ export class PaymentsService {
           },
         },
       }),
-      this.prisma.payment.count({ where: { userId } }),
+      this.prisma.payment.count({ where }),
     ]);
 
     return {
@@ -271,14 +283,15 @@ export class PaymentsService {
         method: p.method,
         status: p.status,
         paidAt: p.paidAt,
+        user: p.user,
         pickup: p.pickup,
         createdAt: p.createdAt,
       })),
       meta: {
-        page: query.page,
-        limit: query.limit,
+        page: query?.page ?? 1,
+        limit,
         total,
-        totalPages: Math.ceil(total / query.limit),
+        totalPages: Math.ceil(total / limit),
       },
     };
   }

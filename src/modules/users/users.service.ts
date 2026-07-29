@@ -35,6 +35,7 @@ export class UsersService {
         lastName: true,
         userType: true,
         role: true,
+        subRole: true,
         referralCode: true,
         avatarUrl: true,
         defaultAddress: true,
