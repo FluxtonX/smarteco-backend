@@ -588,12 +588,6 @@ export class BinsService {
     const deviceId = devEui.toLowerCase();
 
     const decoded = payload.object || payload.decoded || {};
-    if (decoded.distance === undefined) {
-      return {
-        success: false,
-        message: 'No distance value reported in codec object. Skipping.',
-      };
-    }
 
     // 3. Find Device and Associated Bin
     const device = await this.prisma.iotDevice.findUnique({
@@ -611,47 +605,45 @@ export class BinsService {
     }
 
     const bin = device.bin;
-
-    // 4. Calculate Fill Level Percentage from Distance (mm)
-    // fill% = (emptyHeight - distance) / (emptyHeight - fullHeight) * 100
-    const emptyHeight = bin.emptyHeightMm;
-    const fullHeight = bin.fullHeightMm;
-    const distance = decoded.distance; // in mm
-
-    let fillLevel = 0;
-    if (emptyHeight > fullHeight) {
-      const rawFill =
-        ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
-      fillLevel = Math.max(0, Math.min(100, Math.round(rawFill)));
-    } else {
-      this.logger.error(
-        `Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`,
-      );
-    }
-
-    // 5. Update Database States
     const isTilt = decoded.position === 1 || !!decoded.tilt;
-
-    let newStatus = bin.status;
-    if (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
-      newStatus = BinStatus.FULL;
-    } else if (fillLevel < BIN_ALERT_THRESHOLD) {
-      newStatus = BinStatus.ACTIVE;
-    }
-
     const rxInfo = Array.isArray(payload.rxInfo) ? payload.rxInfo[0] : null;
     const signalRssi = rxInfo ? rxInfo.rssi : (payload.rssi ?? null);
 
-    // Update bin fill percentage
-    await this.prisma.bin.update({
-      where: { id: bin.id },
-      data: {
-        fillLevel,
-        status: newStatus,
-        latitude: decoded.latitude ?? bin.latitude,
-        longitude: decoded.longitude ?? bin.longitude,
-      },
-    });
+    let fillLevel = bin.fillLevel;
+
+    // 4. Calculate Fill Level Percentage if distance is present
+    if (decoded.distance !== undefined) {
+      const emptyHeight = bin.emptyHeightMm;
+      const fullHeight = bin.fullHeightMm;
+      const distance = decoded.distance; // in mm
+
+      if (emptyHeight > fullHeight) {
+        const rawFill =
+          ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
+        fillLevel = Math.max(0, Math.min(100, Math.round(rawFill)));
+      } else {
+        this.logger.error(
+          `Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`,
+        );
+      }
+
+      let newStatus = bin.status;
+      if (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
+        newStatus = BinStatus.FULL;
+      } else if (fillLevel < BIN_ALERT_THRESHOLD) {
+        newStatus = BinStatus.ACTIVE;
+      }
+
+      await this.prisma.bin.update({
+        where: { id: bin.id },
+        data: {
+          fillLevel,
+          status: newStatus,
+          latitude: decoded.latitude ?? bin.latitude,
+          longitude: decoded.longitude ?? bin.longitude,
+        },
+      });
+    }
 
     // Update physical device connectivity parameters
     await this.prisma.iotDevice.update({
