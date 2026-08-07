@@ -81,6 +81,9 @@ export const BIN_ALERT_THRESHOLD = 80; // percentage
 export const BIN_AUTO_SCHEDULE_THRESHOLD = 95; // percentage
 export const BINS_PER_USER = 6;
 
+export const DEFAULT_CLIENT_BIN_TYPES = ['GENERAL', 'RECYCLABLE', 'ORGANIC'];
+export const OPTIONAL_CLIENT_BIN_TYPES = ['EWASTE', 'HAZARDOUS', 'GLASS'];
+
 export const BIN_WASTE_TYPES = [
   'ORGANIC',
   'RECYCLABLE',
