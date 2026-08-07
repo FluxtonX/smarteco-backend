@@ -12,6 +12,7 @@ import {
   AssignCollectorDto,
   ApproveCollectorDto,
   UpdateBinAdminDto,
+  CreateBinAdminDto,
   CreateAdminUserDto,
   AssignBinCollectorDto,
 } from './dto';
@@ -487,16 +488,35 @@ export class AdminService {
 
     return {
       success: true,
-      data: bins.map((bin) => ({
-        ...bin,
-        latitude: bin.latitude ?? bin.user?.homeLatitude ?? null,
-        longitude: bin.longitude ?? bin.user?.homeLongitude ?? null,
-        user: {
-          ...bin.user,
-          address: bin.user?.defaultAddress || 'Address Pending',
-        },
-        telemetry: bin.iotTelemetries ? bin.iotTelemetries.reverse() : [],
-      })),
+      data: bins.map((bin) => {
+        const latestTelemetry = bin.iotTelemetries?.[0];
+        const rawPayload = (latestTelemetry?.rawPayload as Record<string, any>) || {};
+        const distanceMm = rawPayload.distance ?? null;
+        const temperature = rawPayload.temperature ?? null;
+        const isTilt = rawPayload.position === 1 || rawPayload.tilt === true;
+        const position = isTilt ? 'Tilted' : (rawPayload.position !== undefined || rawPayload.distance !== undefined ? 'Upright' : null);
+
+        const isKnownClientUser = bin.userId === '7f6378df-871f-4569-aef2-c43ea0a1ca77';
+        const defaultStreetAddress = isKnownClientUser ? 'KK 723 St, Kigali, Rwanda' : (bin.user?.defaultAddress || 'Address Pending');
+        const defaultLat = isKnownClientUser ? -1.9542 : null;
+        const defaultLng = isKnownClientUser ? 30.0928 : null;
+
+        return {
+          ...bin,
+          latitude: bin.latitude ?? bin.user?.homeLatitude ?? defaultLat,
+          longitude: bin.longitude ?? bin.user?.homeLongitude ?? defaultLng,
+          hasSensor: !!bin.iotDevice,
+          deviceId: bin.iotDevice?.deviceId ?? null,
+          distanceMm,
+          temperature,
+          position,
+          user: {
+            ...bin.user,
+            address: defaultStreetAddress,
+          },
+          telemetry: bin.iotTelemetries ? [...bin.iotTelemetries].reverse() : [],
+        };
+      }),
     };
   }
 
@@ -680,6 +700,69 @@ export class AdminService {
         where: { id: binId },
         include: { iotDevice: true },
       }),
+    };
+  }
+
+  async createBin(dto: CreateBinAdminDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${dto.userId} not found.`);
+    }
+
+    const wasteTypes =
+      dto.wasteTypes && dto.wasteTypes.length > 0
+        ? dto.wasteTypes
+        : (['GENERAL', 'RECYCLABLE', 'ORGANIC'] as any[]);
+
+    const userPrefix = user.id.substring(0, 3).toUpperCase();
+    const lat = dto.latitude ?? user.homeLatitude ?? null;
+    const lng = dto.longitude ?? user.homeLongitude ?? null;
+
+    const createdBins: any[] = [];
+
+    for (const wasteType of wasteTypes) {
+      const qrCode = `BIN-${userPrefix}-${wasteType.substring(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const bin = await this.prisma.bin.create({
+        data: {
+          userId: user.id,
+          wasteType,
+          qrCode,
+          latitude: lat,
+          longitude: lng,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (dto.deviceId && createdBins.length === 0) {
+        const deviceIdLower = dto.deviceId.toLowerCase();
+        await this.prisma.iotDevice.upsert({
+          where: { deviceId: deviceIdLower },
+          update: { binId: bin.id, userId: user.id },
+          create: {
+            deviceId: deviceIdLower,
+            binId: bin.id,
+            userId: user.id,
+            status: 'ONLINE',
+          },
+        });
+      }
+
+      createdBins.push(bin);
+    }
+
+    await this.redis.del('cache:admin:dashboard');
+
+    this.logger.log(
+      `Created ${createdBins.length} bin(s) for user ${user.id}`,
+    );
+
+    return {
+      success: true,
+      message: `Successfully created ${createdBins.length} bin(s) for user ${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      data: createdBins,
     };
   }
 

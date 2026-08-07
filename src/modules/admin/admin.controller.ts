@@ -29,6 +29,7 @@ import {
   AssignCollectorDto,
   ApproveCollectorDto,
   UpdateBinAdminDto,
+  CreateBinAdminDto,
   CreateAdminUserDto,
   AssignBinCollectorDto,
 } from './dto';
@@ -133,6 +134,18 @@ export class AdminController {
   @ApiResponse({ status: 409, description: 'User already exists' })
   async createUser(@Body() dto: CreateAdminUserDto) {
     return this.adminService.createUser(dto);
+  }
+
+  @Post('bins')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create new smart bin(s) for a customer',
+    description:
+      'Creates waste bins (default 3: GENERAL, RECYCLABLE, ORGANIC, or custom) for a user with optional sensor pairing.',
+  })
+  @ApiResponse({ status: 201, description: 'Bins created successfully' })
+  async createBin(@Body() dto: CreateBinAdminDto) {
+    return this.adminService.createBin(dto);
   }
 
   @Get('bins')
