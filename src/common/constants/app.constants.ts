@@ -29,6 +29,7 @@ export const ECOPOINTS = {
   GENERAL_PER_KG: 5,
   GLASS_PER_KG: 10,
   HAZARDOUS_PER_ITEM: 30,
+  LANDFILL_PER_KG: 2,
 };
 
 // ─── Tier Thresholds ─────────────────────────────
@@ -70,6 +71,7 @@ export const PICKUP_PRICES = {
   GENERAL: 120,
   GLASS: 200,
   HAZARDOUS: 700,
+  LANDFILL: 100,
 };
 
 export const MAX_COLLECTOR_ASSIGNMENT_DISTANCE_KM = 25;
@@ -82,7 +84,7 @@ export const BIN_AUTO_SCHEDULE_THRESHOLD = 95; // percentage
 export const BINS_PER_USER = 6;
 
 export const DEFAULT_CLIENT_BIN_TYPES = ['GENERAL', 'RECYCLABLE', 'ORGANIC'];
-export const OPTIONAL_CLIENT_BIN_TYPES = ['EWASTE', 'HAZARDOUS', 'GLASS'];
+export const OPTIONAL_CLIENT_BIN_TYPES = ['EWASTE', 'HAZARDOUS', 'GLASS', 'LANDFILL'];
 
 export const BIN_WASTE_TYPES = [
   'ORGANIC',
@@ -91,6 +93,7 @@ export const BIN_WASTE_TYPES = [
   'GENERAL',
   'GLASS',
   'HAZARDOUS',
+  'LANDFILL',
 ] as const;
 
 export const ECOPOINT_REWARD_CATALOG = [

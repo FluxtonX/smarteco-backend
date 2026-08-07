@@ -118,7 +118,7 @@ export class PickupsService {
     );
 
     // Calculate payment amount
-    const amount = PICKUP_PRICES[dto.wasteType] || 100;
+    const amount = PICKUP_PRICES[dto.wasteType] || PICKUP_PRICES.GENERAL || 100;
 
     // Determine currency: Sandbox MoMo usually requires EUR, production uses RWF
     const isSandbox =
@@ -703,8 +703,9 @@ export class PickupsService {
       GENERAL: ECOPOINTS.GENERAL_PER_KG,
       GLASS: ECOPOINTS.GLASS_PER_KG,
       HAZARDOUS: ECOPOINTS.HAZARDOUS_PER_ITEM,
+      LANDFILL: ECOPOINTS.LANDFILL_PER_KG,
     };
-    return pointsMap[wasteType] || 10;
+    return pointsMap[wasteType] || ECOPOINTS.GENERAL_PER_KG || 5;
   }
 
   private formatCollector(collector: CollectorWithUser) {

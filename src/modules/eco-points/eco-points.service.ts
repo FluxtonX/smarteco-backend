@@ -273,9 +273,10 @@ export class EcoPointsService {
       GENERAL: ECOPOINTS.GENERAL_PER_KG,
       GLASS: ECOPOINTS.GLASS_PER_KG,
       HAZARDOUS: ECOPOINTS.HAZARDOUS_PER_ITEM,
+      LANDFILL: ECOPOINTS.LANDFILL_PER_KG,
     };
 
-    const baseRate = basePointsMap[wasteType] || 10;
+    const baseRate = basePointsMap[wasteType] || ECOPOINTS.GENERAL_PER_KG || 5;
     const rawPoints = Math.round(baseRate * weightKg * multiplier);
 
     return Math.max(1, rawPoints); // At least 1 point

@@ -27,6 +27,7 @@ enum WasteType {
   EWASTE
   GLASS
   HAZARDOUS
+  LANDFILL
 }
 
 enum PickupStatus {
