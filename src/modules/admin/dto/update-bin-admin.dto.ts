@@ -78,4 +78,21 @@ export class UpdateBinAdminDto {
   @IsOptional()
   @IsEnum(WasteType)
   wasteType?: WasteType;
+
+  @ApiPropertyOptional({
+    description: 'Fill level percentage of the bin (0-100).',
+    example: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  fillLevel?: number;
+
+  @ApiPropertyOptional({
+    description: 'Last emptied timestamp.',
+    example: '2026-08-11T16:00:00Z',
+  })
+  @IsOptional()
+  lastEmptied?: string | Date;
 }
