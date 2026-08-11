@@ -682,9 +682,22 @@ export class AdminService {
       }
 
       // 2. Update bin fields
+      const updateData: any = { ...binFields };
+      if (
+        binFields.fillLevel !== undefined &&
+        ((bin.fillLevel >= 20 && binFields.fillLevel <= 10) ||
+          (binFields.fillLevel === 0 && bin.fillLevel > 0)) &&
+        !binFields.lastEmptied
+      ) {
+        updateData.lastEmptied = new Date();
+      }
+      if (typeof updateData.lastEmptied === 'string') {
+        updateData.lastEmptied = new Date(updateData.lastEmptied);
+      }
+
       await tx.bin.update({
         where: { id: binId },
-        data: binFields,
+        data: updateData,
       });
     });
 

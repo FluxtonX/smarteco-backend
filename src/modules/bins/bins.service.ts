@@ -213,12 +213,18 @@ export class BinsService {
       newStatus = BinStatus.ACTIVE;
     }
 
+    // Detect IoT Drop / Emptying event (e.g. fill level drops from >= 20% down to <= 10% or to 0%)
+    const isEmptiedEvent =
+      (bin.fillLevel >= 20 && dto.fillLevel <= 10) ||
+      (dto.fillLevel === 0 && bin.fillLevel > 0);
+
     // Update bin
     await this.prisma.bin.update({
       where: { id: binId },
       data: {
         fillLevel: dto.fillLevel,
         status: newStatus,
+        ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
       },
     });
 
@@ -341,6 +347,11 @@ export class BinsService {
       newStatus = BinStatus.ACTIVE;
     }
 
+    // Detect IoT Drop / Emptying event
+    const isEmptiedEvent =
+      (bin.fillLevel >= 20 && dto.fillLevel <= 10) ||
+      (dto.fillLevel === 0 && bin.fillLevel > 0);
+
     await this.prisma.bin.update({
       where: { id: bin.id },
       data: {
@@ -348,6 +359,7 @@ export class BinsService {
         status: newStatus,
         latitude: dto.latitude ?? bin.latitude,
         longitude: dto.longitude ?? bin.longitude,
+        ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
       },
     });
 
@@ -634,6 +646,11 @@ export class BinsService {
         newStatus = BinStatus.ACTIVE;
       }
 
+      // Detect IoT Drop / Emptying event
+      const isEmptiedEvent =
+        (bin.fillLevel >= 20 && fillLevel <= 10) ||
+        (fillLevel === 0 && bin.fillLevel > 0);
+
       await this.prisma.bin.update({
         where: { id: bin.id },
         data: {
@@ -641,6 +658,7 @@ export class BinsService {
           status: newStatus,
           latitude: decoded.latitude ?? bin.latitude,
           longitude: decoded.longitude ?? bin.longitude,
+          ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
         },
       });
     }

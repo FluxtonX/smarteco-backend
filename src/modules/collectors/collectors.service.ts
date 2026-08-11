@@ -583,6 +583,15 @@ export class CollectorsService {
             lastEmptied: new Date(),
           },
         });
+      } else if (pickup.userId && pickup.wasteType) {
+        await this.prisma.bin.updateMany({
+          where: { userId: pickup.userId, wasteType: pickup.wasteType },
+          data: {
+            fillLevel: 0,
+            status: BinStatus.ACTIVE,
+            lastEmptied: new Date(),
+          },
+        });
       }
 
       // Increment collector's total pickups
