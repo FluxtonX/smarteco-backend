@@ -28,6 +28,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TrackingGateway } from '../../websocket/tracking.gateway';
 
 @Injectable()
 export class BinsService {
@@ -37,6 +38,7 @@ export class BinsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
+    private readonly trackingGateway: TrackingGateway,
   ) {}
 
   // ─── GET ALL BINS ───────────────────────────────
@@ -228,6 +230,9 @@ export class BinsService {
       },
     });
 
+    // Broadcast real-time update to admin panel
+    this.broadcastBinUpdate(binId, bin.qrCode, dto.fillLevel, newStatus);
+
     let alertTriggered = false;
     let autoScheduled = false;
 
@@ -362,6 +367,9 @@ export class BinsService {
         ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
       },
     });
+
+    // Broadcast real-time update to admin panel
+    this.broadcastBinUpdate(bin.id, bin.qrCode, dto.fillLevel, newStatus);
 
     const device = dto.deviceId
       ? await this.prisma.iotDevice.upsert({
@@ -661,6 +669,9 @@ export class BinsService {
           ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
         },
       });
+
+      // Broadcast real-time update to admin panel
+      this.broadcastBinUpdate(bin.id, bin.qrCode, fillLevel, newStatus);
     }
 
     // Update physical device connectivity parameters
@@ -797,5 +808,34 @@ export class BinsService {
     date.setDate(date.getDate() + 1); // Tomorrow
     date.setHours(0, 0, 0, 0);
     return date;
+  }
+
+  /**
+   * Broadcasts a bin telemetry update to all connected WebSocket clients.
+   * This enables the admin panel to receive near-instant fill level changes
+   * without relying solely on polling.
+   */
+  private broadcastBinUpdate(
+    binId: string,
+    qrCode: string,
+    fillLevel: number,
+    status: string,
+  ) {
+    try {
+      this.trackingGateway.server.emit('bin:telemetry:updated', {
+        binId,
+        qrCode,
+        fillLevel,
+        status,
+        timestamp: new Date().toISOString(),
+      });
+      this.logger.debug(
+        `Broadcast bin update: ${qrCode} fill=${fillLevel}% status=${status}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `WebSocket bin broadcast failed: ${(err as Error).message}`,
+      );
+    }
   }
 }
