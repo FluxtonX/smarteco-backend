@@ -1612,4 +1612,154 @@ export class AdminService {
       },
     };
   }
+
+  // ─── AI SORTING & KIOSKS ─────────────────────────
+
+  async getSortingStats() {
+    const [
+      totalEvents,
+      byCategory,
+      totalPointsAwarded,
+      kiosks,
+      recentEvents,
+    ] = await Promise.all([
+      this.prisma.sortingEvent.count(),
+      this.prisma.sortingEvent.groupBy({
+        by: ['category'],
+        _count: true,
+        _avg: { confidence: true },
+      }),
+      this.prisma.ecoPointsLedger.aggregate({
+        _sum: { pointsAwarded: true },
+      }),
+      this.prisma.kiosk.findMany({
+        select: { id: true, kioskId: true, status: true },
+      }),
+      this.prisma.sortingEvent.findMany({
+        take: 10,
+        orderBy: { capturedAt: 'desc' },
+        include: {
+          kiosk: { select: { name: true, location: true } },
+          user: { select: { firstName: true, lastName: true } },
+        },
+      }),
+    ]);
+
+    const activeKiosks = kiosks.filter((k) => k.status === 'ACTIVE').length;
+
+    return {
+      success: true,
+      data: {
+        totalEvents,
+        totalPointsAwarded: totalPointsAwarded._sum.pointsAwarded || 0,
+        kiosks: {
+          total: kiosks.length,
+          active: activeKiosks,
+          inactive: kiosks.length - activeKiosks,
+        },
+        byCategory: byCategory.map((c) => ({
+          category: c.category,
+          count: c._count,
+          avgConfidence: c._avg.confidence
+            ? Math.round(c._avg.confidence * 100) / 100
+            : 0,
+        })),
+        recentEvents: recentEvents.map((e) => ({
+          id: e.id,
+          category: e.category,
+          confidence: e.confidence,
+          capturedAt: e.capturedAt,
+          kioskName: e.kiosk?.name || e.kioskId,
+          kioskLocation: e.kiosk?.location || null,
+          userName: e.user
+            ? `${e.user.firstName || ''} ${e.user.lastName || ''}`.trim()
+            : null,
+        })),
+      },
+    };
+  }
+
+  async getSortingEvents(query: {
+    page?: number;
+    limit?: number;
+    kioskId?: string;
+    category?: string;
+  }) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (query.kioskId) where.kioskId = query.kioskId;
+    if (query.category) where.category = query.category;
+
+    const [events, total] = await Promise.all([
+      this.prisma.sortingEvent.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { capturedAt: 'desc' },
+        include: {
+          kiosk: { select: { name: true, location: true } },
+          user: {
+            select: { id: true, firstName: true, lastName: true, phone: true },
+          },
+        },
+      }),
+      this.prisma.sortingEvent.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: events.map((e) => ({
+        id: e.id,
+        kioskId: e.kioskId,
+        kioskName: e.kiosk?.name || e.kioskId,
+        kioskLocation: e.kiosk?.location || null,
+        category: e.category,
+        confidence: e.confidence,
+        capturedAt: e.capturedAt,
+        syncedAt: e.syncedAt,
+        user: e.user
+          ? {
+              id: e.user.id,
+              name:
+                `${e.user.firstName || ''} ${e.user.lastName || ''}`.trim() ||
+                'Unknown',
+              phone: e.user.phone,
+            }
+          : null,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getKiosks() {
+    const kiosks = await this.prisma.kiosk.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { sortingEvents: true } },
+      },
+    });
+
+    return {
+      success: true,
+      data: kiosks.map((k) => ({
+        id: k.id,
+        kioskId: k.kioskId,
+        name: k.name,
+        location: k.location,
+        status: k.status,
+        apiKey: k.apiKey,
+        lastSeenAt: k.lastSeenAt,
+        totalEvents: k._count.sortingEvents,
+        createdAt: k.createdAt,
+      })),
+    };
+  }
 }

@@ -610,4 +610,80 @@ export class AdminController {
   ) {
     return this.adminService.getRevenueAnalytics(from, to);
   }
+
+  // ─── AI SORTING & KIOSKS ─────────────────────────
+
+  @Get('sorting/stats')
+  @ApiOperation({
+    summary: 'Get AI Sorting statistics',
+    description:
+      'Returns aggregated sorting event metrics including totals by category, kiosk statuses, points awarded, and recent events.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sorting statistics retrieved',
+  })
+  async getSortingStats() {
+    return this.adminService.getSortingStats();
+  }
+
+  @Get('sorting/events')
+  @ApiOperation({
+    summary: 'Get paginated AI Sorting events',
+    description:
+      'Returns historical sorting events with kiosk and user details. Supports filtering by kioskId and category.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Page number',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Items per page',
+    example: 20,
+  })
+  @ApiQuery({
+    name: 'kioskId',
+    required: false,
+    description: 'Filter by kiosk ID',
+  })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    description: 'Filter by sorting category',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sorting events retrieved',
+  })
+  async getSortingEvents(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('kioskId') kioskId?: string,
+    @Query('category') category?: string,
+  ) {
+    return this.adminService.getSortingEvents({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      kioskId,
+      category,
+    });
+  }
+
+  @Get('kiosks')
+  @ApiOperation({
+    summary: 'List all kiosks',
+    description:
+      'Returns all registered kiosks with their API keys, status, and event counts. Admin only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Kiosks list retrieved',
+  })
+  async getKiosks() {
+    return this.adminService.getKiosks();
+  }
 }
