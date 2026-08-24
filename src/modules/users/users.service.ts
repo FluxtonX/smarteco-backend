@@ -72,6 +72,7 @@ export class UsersService {
       success: true,
       data: {
         ...user,
+        isApproved: user.isActive,
         ecoPoints: totalPoints,
         ecoTier: tier,
         tierMultiplier: tierInfo.multiplier,
