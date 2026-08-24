@@ -8,6 +8,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { UpdateProfileDto, UpdateFcmTokenDto } from './dto';
 import { TIER_THRESHOLDS } from '../../common/constants';
 import { RedisService } from '../../infrastructure/redis/redis.service';
+import { AddressValidationService } from '../../common/services/address-validation.service';
 
 @Injectable()
 export class UsersService {
@@ -95,6 +96,11 @@ export class UsersService {
       }
     }
 
+    let validatedAddress: string | undefined;
+    if (dto.defaultAddress !== undefined) {
+      validatedAddress = AddressValidationService.validateAddress(dto.defaultAddress);
+    }
+
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -103,8 +109,8 @@ export class UsersService {
         ...(dto.email !== undefined && { email: dto.email }),
         ...(dto.userType !== undefined && { userType: dto.userType }),
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
-        ...(dto.defaultAddress !== undefined && {
-          defaultAddress: dto.defaultAddress,
+        ...(validatedAddress !== undefined && {
+          defaultAddress: validatedAddress,
         }),
         ...(dto.homeLatitude !== undefined && {
           homeLatitude: dto.homeLatitude,
