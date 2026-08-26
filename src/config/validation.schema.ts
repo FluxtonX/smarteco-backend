@@ -73,6 +73,11 @@ export const validationSchema = Joi.object({
   AWS_S3_BUCKET: Joi.string().allow('').optional(),
   AWS_S3_PUBLIC_BASE_URL: Joi.string().allow('').optional(),
 
+  // AWS SQS IoT Ingestion
+  AWS_SQS_QUEUE_URL: Joi.string().allow('').optional(),
+  SQS_CONSUMER_ENABLED: Joi.boolean().default(true),
+  AWS_SQS_POLL_INTERVAL_MS: Joi.number().default(5000),
+
   // Sandbox / Play Store Mock Auth
   MOCK_PHONE_NUMBER: Joi.string().allow('').optional(),
   MOCK_OTP: Joi.string().allow('').optional(),

@@ -99,4 +99,35 @@ describe('BinsService IoT sync', () => {
     });
     expect(result.data.autoScheduled).toBe(true);
   });
+
+  it('updates lastEmptied when IoT telemetry detects a fill level drop to 0%', async () => {
+    prisma.bin.findUnique.mockResolvedValue({
+      id: 'bin-1',
+      userId: 'user-1',
+      qrCode: 'BIN-ABC-1234',
+      wasteType: WasteType.ORGANIC,
+      fillLevel: 80,
+      status: BinStatus.FULL,
+      latitude: -1.9,
+      longitude: 30.1,
+    });
+    prisma.bin.update.mockResolvedValue({});
+    prisma.iotDevice.upsert.mockResolvedValue({ id: 'device-1' });
+
+    await service.syncFromDevice({
+      qrCode: 'BIN-ABC-1234',
+      apiKey: 'device-secret',
+      deviceId: 'ESP32-BIN-1',
+      fillLevel: 0,
+    });
+
+    expect(prisma.bin.update).toHaveBeenCalledWith({
+      where: { id: 'bin-1' },
+      data: expect.objectContaining({
+        fillLevel: 0,
+        status: BinStatus.ACTIVE,
+        lastEmptied: expect.any(Date),
+      }),
+    });
+  });
 });

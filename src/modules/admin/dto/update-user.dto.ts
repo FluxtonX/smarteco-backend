@@ -74,4 +74,9 @@ export class UpdateUserDto {
   @ApiPropertyOptional({ description: 'Assigned permissions list' })
   @IsOptional()
   permissions?: string[];
+
+  @ApiPropertyOptional({ description: 'Optional password update' })
+  @IsOptional()
+  @IsString()
+  password?: string;
 }

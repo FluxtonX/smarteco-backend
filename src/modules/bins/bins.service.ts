@@ -28,6 +28,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TrackingGateway } from '../../websocket/tracking.gateway';
 
 @Injectable()
 export class BinsService {
@@ -37,6 +38,7 @@ export class BinsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
+    private readonly trackingGateway: TrackingGateway,
   ) {}
 
   // ─── GET ALL BINS ───────────────────────────────
@@ -213,14 +215,23 @@ export class BinsService {
       newStatus = BinStatus.ACTIVE;
     }
 
+    // Detect IoT Drop / Emptying event (e.g. fill level drops from >= 20% down to <= 10% or to 0%)
+    const isEmptiedEvent =
+      (bin.fillLevel >= 20 && dto.fillLevel <= 10) ||
+      (dto.fillLevel === 0 && bin.fillLevel > 0);
+
     // Update bin
     await this.prisma.bin.update({
       where: { id: binId },
       data: {
         fillLevel: dto.fillLevel,
         status: newStatus,
+        ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
       },
     });
+
+    // Broadcast real-time update to admin panel
+    this.broadcastBinUpdate(binId, bin.qrCode, dto.fillLevel, newStatus);
 
     let alertTriggered = false;
     let autoScheduled = false;
@@ -341,6 +352,11 @@ export class BinsService {
       newStatus = BinStatus.ACTIVE;
     }
 
+    // Detect IoT Drop / Emptying event
+    const isEmptiedEvent =
+      (bin.fillLevel >= 20 && dto.fillLevel <= 10) ||
+      (dto.fillLevel === 0 && bin.fillLevel > 0);
+
     await this.prisma.bin.update({
       where: { id: bin.id },
       data: {
@@ -348,8 +364,12 @@ export class BinsService {
         status: newStatus,
         latitude: dto.latitude ?? bin.latitude,
         longitude: dto.longitude ?? bin.longitude,
+        ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
       },
     });
+
+    // Broadcast real-time update to admin panel
+    this.broadcastBinUpdate(bin.id, bin.qrCode, dto.fillLevel, newStatus);
 
     const device = dto.deviceId
       ? await this.prisma.iotDevice.upsert({
@@ -588,12 +608,6 @@ export class BinsService {
     const deviceId = devEui.toLowerCase();
 
     const decoded = payload.object || payload.decoded || {};
-    if (decoded.distance === undefined) {
-      return {
-        success: false,
-        message: 'No distance value reported in codec object. Skipping.',
-      };
-    }
 
     // 3. Find Device and Associated Bin
     const device = await this.prisma.iotDevice.findUnique({
@@ -611,47 +625,54 @@ export class BinsService {
     }
 
     const bin = device.bin;
-
-    // 4. Calculate Fill Level Percentage from Distance (mm)
-    // fill% = (emptyHeight - distance) / (emptyHeight - fullHeight) * 100
-    const emptyHeight = bin.emptyHeightMm;
-    const fullHeight = bin.fullHeightMm;
-    const distance = decoded.distance; // in mm
-
-    let fillLevel = 0;
-    if (emptyHeight > fullHeight) {
-      const rawFill =
-        ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
-      fillLevel = Math.max(0, Math.min(100, Math.round(rawFill)));
-    } else {
-      this.logger.error(
-        `Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`,
-      );
-    }
-
-    // 5. Update Database States
     const isTilt = decoded.position === 1 || !!decoded.tilt;
-
-    let newStatus = bin.status;
-    if (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
-      newStatus = BinStatus.FULL;
-    } else if (fillLevel < BIN_ALERT_THRESHOLD) {
-      newStatus = BinStatus.ACTIVE;
-    }
-
     const rxInfo = Array.isArray(payload.rxInfo) ? payload.rxInfo[0] : null;
     const signalRssi = rxInfo ? rxInfo.rssi : (payload.rssi ?? null);
 
-    // Update bin fill percentage
-    await this.prisma.bin.update({
-      where: { id: bin.id },
-      data: {
-        fillLevel,
-        status: newStatus,
-        latitude: decoded.latitude ?? bin.latitude,
-        longitude: decoded.longitude ?? bin.longitude,
-      },
-    });
+    let fillLevel = bin.fillLevel;
+
+    // 4. Calculate Fill Level Percentage if distance is present
+    if (decoded.distance !== undefined) {
+      const emptyHeight = bin.emptyHeightMm;
+      const fullHeight = bin.fullHeightMm;
+      const distance = decoded.distance; // in mm
+
+      if (emptyHeight > fullHeight) {
+        const rawFill =
+          ((emptyHeight - distance) / (emptyHeight - fullHeight)) * 100;
+        fillLevel = Math.max(0, Math.min(100, Math.round(rawFill)));
+      } else {
+        this.logger.error(
+          `Invalid calibration heights for bin ${bin.qrCode}: emptyHeight=${emptyHeight} <= fullHeight=${fullHeight}`,
+        );
+      }
+
+      let newStatus = bin.status;
+      if (fillLevel >= BIN_AUTO_SCHEDULE_THRESHOLD) {
+        newStatus = BinStatus.FULL;
+      } else if (fillLevel < BIN_ALERT_THRESHOLD) {
+        newStatus = BinStatus.ACTIVE;
+      }
+
+      // Detect IoT Drop / Emptying event
+      const isEmptiedEvent =
+        (bin.fillLevel >= 20 && fillLevel <= 10) ||
+        (fillLevel === 0 && bin.fillLevel > 0);
+
+      await this.prisma.bin.update({
+        where: { id: bin.id },
+        data: {
+          fillLevel,
+          status: newStatus,
+          latitude: decoded.latitude ?? bin.latitude,
+          longitude: decoded.longitude ?? bin.longitude,
+          ...(isEmptiedEvent ? { lastEmptied: new Date() } : {}),
+        },
+      });
+
+      // Broadcast real-time update to admin panel
+      this.broadcastBinUpdate(bin.id, bin.qrCode, fillLevel, newStatus);
+    }
 
     // Update physical device connectivity parameters
     await this.prisma.iotDevice.update({
@@ -787,5 +808,34 @@ export class BinsService {
     date.setDate(date.getDate() + 1); // Tomorrow
     date.setHours(0, 0, 0, 0);
     return date;
+  }
+
+  /**
+   * Broadcasts a bin telemetry update to all connected WebSocket clients.
+   * This enables the admin panel to receive near-instant fill level changes
+   * without relying solely on polling.
+   */
+  private broadcastBinUpdate(
+    binId: string,
+    qrCode: string,
+    fillLevel: number,
+    status: string,
+  ) {
+    try {
+      this.trackingGateway.server.emit('bin:telemetry:updated', {
+        binId,
+        qrCode,
+        fillLevel,
+        status,
+        timestamp: new Date().toISOString(),
+      });
+      this.logger.debug(
+        `Broadcast bin update: ${qrCode} fill=${fillLevel}% status=${status}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `WebSocket bin broadcast failed: ${(err as Error).message}`,
+      );
+    }
   }
 }

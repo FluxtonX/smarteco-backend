@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
@@ -242,6 +243,8 @@ export class AuthService {
           email: user.email,
           userType: user.userType,
           role: user.role,
+          isActive: user.isActive,
+          isApproved: user.isActive,
           referralCode: user.referralCode,
           avatarUrl: user.avatarUrl,
           ecoPoints: totalPoints,
@@ -259,7 +262,7 @@ export class AuthService {
     };
   }
 
-  // ─── ADMIN LOGIN (Hardcoded) ─────────────────────
+  // ─── ADMIN LOGIN ────────────────────────────────
 
   async adminLogin(dto: AdminLoginDto) {
     const { email, password } = dto;
@@ -267,35 +270,64 @@ export class AuthService {
     const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
 
-    if (email !== adminEmail || password !== adminPassword) {
-      throw new UnauthorizedException('Invalid admin credentials');
-    }
+    let user: any = null;
 
-    // Find the admin user in DB or create if doesn't exist
-    let user = await this.prisma.user.findUnique({
-      where: { email },
-    });
+    // 1. Check if matching the master .env admin credentials
+    if (adminEmail && adminPassword && email === adminEmail && password === adminPassword) {
+      user = await this.prisma.user.findUnique({
+        where: { email },
+      });
 
-    if (!user) {
-      // Auto-create admin user if missing
-      user = await this.prisma.user.create({
-        data: {
-          email,
-          phone: 'ADMIN_PORTAL', // Fixed placeholder for admin
-          role: 'ADMIN',
-          subRole: 'Super Admin',
-          referralCode: this.generateReferralCode(),
-        },
+      if (!user) {
+        // Auto-create admin user if missing
+        user = await this.prisma.user.create({
+          data: {
+            email,
+            phone: 'ADMIN_PORTAL',
+            role: 'ADMIN',
+            subRole: 'Super Admin',
+            firstName: 'System',
+            lastName: 'Administrator',
+            referralCode: this.generateReferralCode(),
+          },
+        });
+      } else if (user.role !== 'ADMIN' || !user.subRole) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            role: 'ADMIN',
+            subRole: user.subRole || 'Super Admin',
+          },
+        });
+      }
+    } else {
+      // 2. Look up admin / staff user by email in database
+      const dbUser = await this.prisma.user.findUnique({
+        where: { email },
       });
-    } else if (user.role !== 'ADMIN' || !user.subRole) {
-      // Ensure the user actually has the ADMIN role and Super Admin subRole
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          role: 'ADMIN',
-          subRole: user.subRole || 'Super Admin',
-        },
-      });
+
+      if (!dbUser) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      if (!dbUser.isActive) {
+        throw new UnauthorizedException('Account is inactive or suspended');
+      }
+
+      if (dbUser.role !== 'ADMIN' && !dbUser.subRole) {
+        throw new UnauthorizedException('Access denied. Administrator privileges required.');
+      }
+
+      if (!dbUser.password) {
+        throw new UnauthorizedException('Password not set for this account. Please contact administrator.');
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, dbUser.password);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      user = dbUser;
     }
 
     const tokens = await this.generateTokens(user);
@@ -315,6 +347,7 @@ export class AuthService {
           email: user.email,
           userType: user.userType,
           role: user.role,
+          subRole: user.subRole || 'Super Admin',
           referralCode: user.referralCode,
           avatarUrl: user.avatarUrl,
           ecoPoints: totalPoints,
@@ -524,6 +557,8 @@ export class AuthService {
           email: user.email,
           userType: user.userType,
           role: user.role,
+          isActive: user.isActive,
+          isApproved: user.isActive,
           referralCode: user.referralCode,
           avatarUrl: user.avatarUrl,
           ecoPoints: totalPoints,

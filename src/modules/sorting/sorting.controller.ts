@@ -21,6 +21,7 @@ import { SortingService } from './sorting.service';
 import { ClassifyDto, KioskHeartbeatDto, SortingEventQueryDto } from './dto';
 import { KioskAuthGuard } from './guards/kiosk-auth.guard';
 import { JwtAuthGuard } from '../auth/guards';
+import { Public } from '../auth/decorators/public.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
@@ -33,6 +34,7 @@ export class SortingController {
   // ─── CLASSIFY TELEMETRY ──────────────────────────
 
   @Post('sorting/classify')
+  @Public()
   @UseGuards(KioskAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -56,6 +58,7 @@ export class SortingController {
   // ─── KIOSK HEARTBEAT ─────────────────────────────
 
   @Post('kiosks/:id/heartbeat')
+  @Public()
   @UseGuards(KioskAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
