@@ -4,6 +4,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../database/prisma.service';
 import {
   AdminUserQueryDto,
@@ -268,12 +269,16 @@ export class AdminService {
       );
     }
 
+    const rawPassword = dto.password || 'SmartEco2026!';
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
     const newUser = await this.prisma.user.create({
       data: {
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
         phone: dto.phone,
+        password: hashedPassword,
         role: dto.role || UserRole.ADMIN,
         subRole: dto.subRole || 'Super Admin',
         isActive: dto.isActive !== undefined ? dto.isActive : true,
@@ -303,11 +308,15 @@ export class AdminService {
 
     const updateData: Prisma.UserUpdateInput = {};
     if (dto.role !== undefined) updateData.role = dto.role;
+    if (dto.subRole !== undefined) updateData.subRole = dto.subRole;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
     if (dto.firstName !== undefined) updateData.firstName = dto.firstName;
     if (dto.lastName !== undefined) updateData.lastName = dto.lastName;
     if (dto.phone !== undefined) updateData.phone = dto.phone;
     if (dto.userType !== undefined) updateData.userType = dto.userType;
+    if (dto.password) {
+      updateData.password = await bcrypt.hash(dto.password, 10);
+    }
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
