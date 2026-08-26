@@ -285,18 +285,18 @@ export class AuthService {
             email,
             phone: 'ADMIN_PORTAL',
             role: 'ADMIN',
-            subRole: 'Super Admin',
+            subRole: 'Admin',
             firstName: 'System',
             lastName: 'Administrator',
             referralCode: this.generateReferralCode(),
           },
         });
-      } else if (user.role !== 'ADMIN' || !user.subRole) {
+      } else if (user.role !== 'ADMIN' || !user.subRole || user.subRole === 'Super Admin') {
         user = await this.prisma.user.update({
           where: { id: user.id },
           data: {
             role: 'ADMIN',
-            subRole: user.subRole || 'Super Admin',
+            subRole: 'Admin',
           },
         });
       }
@@ -347,7 +347,7 @@ export class AuthService {
           email: user.email,
           userType: user.userType,
           role: user.role,
-          subRole: user.subRole || 'Super Admin',
+          subRole: user.subRole || 'Admin',
           referralCode: user.referralCode,
           avatarUrl: user.avatarUrl,
           ecoPoints: totalPoints,
