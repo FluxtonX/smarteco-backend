@@ -673,6 +673,26 @@ export class AdminController {
     });
   }
 
+  @Get('sorting/kiosk-telemetry')
+  @ApiOperation({
+    summary: 'Get raw kiosk telemetry events from DB (Admin only)',
+  })
+  async getKioskTelemetryEvents(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('kioskId') kioskId?: string,
+    @Query('eventType') eventType?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getKioskTelemetryEvents({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      kioskId,
+      eventType,
+      search,
+    });
+  }
+
   @Get('kiosks')
   @ApiOperation({
     summary: 'List all kiosks',

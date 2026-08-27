@@ -1780,6 +1780,55 @@ export class AdminService {
     };
   }
 
+  async getKioskTelemetryEvents(query: {
+    page?: number;
+    limit?: number;
+    kioskId?: string;
+    eventType?: string;
+    search?: string;
+  }) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (query.kioskId) where.kioskId = query.kioskId;
+    if (query.eventType) where.eventType = query.eventType;
+    if (query.search) {
+      where.OR = [
+        { item: { contains: query.search, mode: 'insensitive' } },
+        { eventType: { contains: query.search, mode: 'insensitive' } },
+        { category: { contains: query.search, mode: 'insensitive' } },
+        { sessionId: { contains: query.search, mode: 'insensitive' } },
+        { kioskId: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [events, total] = await Promise.all([
+      this.prisma.kioskTelemetryEvent.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { occurredAt: 'desc' },
+        include: {
+          kiosk: { select: { name: true, location: true } },
+        },
+      }),
+      this.prisma.kioskTelemetryEvent.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: events,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async getKiosks() {
     const kiosks = await this.prisma.kiosk.findMany({
       orderBy: { createdAt: 'desc' },
