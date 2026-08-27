@@ -10,6 +10,7 @@ import {
   SingleClassifyEventDto,
   KioskHeartbeatDto,
   SortingEventQueryDto,
+  KioskExportPayloadDto,
 } from './dto';
 import { AI_SORTING_POINTS, TIER_THRESHOLDS } from '../../common/constants';
 import { EcoTier, SortingCategory, Prisma } from '@prisma/client';
@@ -344,4 +345,185 @@ export class SortingService {
       );
     }
   }
+
+  // ─── INGEST SCHEMA V2 KIOSK EXPORT PAYLOAD ──────────
+
+  async ingestKioskExportPayload(dto: KioskExportPayloadDto) {
+    this.logger.log(
+      `Ingesting custom export payload from kiosk: ${dto.kiosk_id} (${dto.events.length} events)`,
+    );
+
+    // Ensure Kiosk exists (auto-create if missing)
+    await this.prisma.kiosk.upsert({
+      where: { kioskId: dto.kiosk_id },
+      create: {
+        kioskId: dto.kiosk_id,
+        name: `AI Kiosk (${dto.kiosk_id})`,
+        lastSeenAt: new Date(),
+      },
+      update: {
+        lastSeenAt: new Date(),
+      },
+    });
+
+    let ingestedCount = 0;
+    let skippedCount = 0;
+    const ingestedIds: string[] = [];
+
+    const validSortingCategories = Object.values(SortingCategory);
+
+    for (const evt of dto.events) {
+      // Deduplication check
+      const existing = await this.prisma.kioskTelemetryEvent.findUnique({
+        where: { eventId: evt.event_id },
+      });
+
+      if (existing) {
+        skippedCount++;
+        continue;
+      }
+
+      const normalizedConfidence =
+        evt.confidence !== undefined && evt.confidence !== null
+          ? evt.confidence > 1
+            ? evt.confidence / 100
+            : evt.confidence
+          : 0.95;
+
+      const occurredDate = new Date(evt.occurred_at || Date.now());
+
+      // Create KioskTelemetryEvent record
+      await this.prisma.kioskTelemetryEvent.create({
+        data: {
+          eventId: evt.event_id,
+          kioskId: dto.kiosk_id,
+          sessionId: evt.session_id || null,
+          appVersion: evt.app_version || dto.app_version || null,
+          schemaVersion: evt.schema_version || dto.schema_version || 2,
+          occurredAt: occurredDate,
+          seq: evt.seq || null,
+          eventType: evt.event_type || 'SORT',
+          category: evt.category || null,
+          binId: evt.bin_id || null,
+          item: evt.item || null,
+          confidence: normalizedConfidence,
+          language: evt.language || null,
+          material: evt.material || null,
+          massG: evt.mass_g || null,
+          massBasis: evt.mass_basis || null,
+          co2Factor: evt.co2_factor || null,
+          co2Kg: evt.co2_kg || 0,
+          diverted: evt.diverted ?? false,
+          fillLevelAfter: evt.fill_level_after || null,
+          syncedAt: evt.synced_at ? new Date(evt.synced_at) : new Date(),
+          syncState: evt.sync_state ?? 1,
+        },
+      });
+
+      // If category matches a valid SortingCategory, sync into SortingEvent table
+      if (
+        evt.category &&
+        validSortingCategories.includes(evt.category as SortingCategory)
+      ) {
+        const existingSortingEvt = await this.prisma.sortingEvent.findUnique({
+          where: { idempotencyKey: evt.event_id },
+        });
+
+        if (!existingSortingEvt) {
+          let validBinId: string | null = null;
+          if (evt.bin_id) {
+            const matchedBin = await this.prisma.bin.findUnique({
+              where: { id: evt.bin_id },
+            });
+            if (matchedBin) validBinId = matchedBin.id;
+          }
+
+          await this.prisma.sortingEvent.create({
+            data: {
+              kioskId: dto.kiosk_id,
+              category: evt.category as SortingCategory,
+              confidence: normalizedConfidence,
+              capturedAt: occurredDate,
+              idempotencyKey: evt.event_id,
+              binId: validBinId,
+            },
+          });
+        }
+      }
+
+      ingestedCount++;
+      ingestedIds.push(evt.event_id);
+    }
+
+    return {
+      success: true,
+      message: `Successfully ingested ${ingestedCount} events from kiosk ${dto.kiosk_id}`,
+      data: {
+        kioskId: dto.kiosk_id,
+        totalEventsInPayload: dto.events.length,
+        ingestedCount,
+        skippedCount,
+        ingestedIds,
+      },
+    };
+  }
+
+  // ─── QUERY KIOSK TELEMETRY EVENTS ─────────────────
+
+  async getKioskTelemetryEvents(query: {
+    page?: number;
+    limit?: number;
+    kioskId?: string;
+    eventType?: string;
+    search?: string;
+  }) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.KioskTelemetryEventWhereInput = {};
+
+    if (query.kioskId) {
+      where.kioskId = query.kioskId;
+    }
+
+    if (query.eventType) {
+      where.eventType = query.eventType;
+    }
+
+    if (query.search) {
+      where.OR = [
+        { item: { contains: query.search, mode: 'insensitive' } },
+        { eventType: { contains: query.search, mode: 'insensitive' } },
+        { category: { contains: query.search, mode: 'insensitive' } },
+        { sessionId: { contains: query.search, mode: 'insensitive' } },
+        { kioskId: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [events, total] = await Promise.all([
+      this.prisma.kioskTelemetryEvent.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { occurredAt: 'desc' },
+        include: {
+          kiosk: { select: { name: true, location: true } },
+        },
+      }),
+      this.prisma.kioskTelemetryEvent.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: events,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }
+

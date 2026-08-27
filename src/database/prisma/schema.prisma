@@ -570,6 +570,7 @@ model Kiosk {
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
   sortingEvents SortingEvent[]
+  telemetryEvents KioskTelemetryEvent[]
 
   @@map("kiosks")
 }
@@ -618,6 +619,42 @@ model EcoPointsLedger {
   @@index([createdAt])
   @@map("ecopoints_ledger")
 }
+
+model KioskTelemetryEvent {
+  id             String    @id @default(uuid())
+  eventId        String    @unique @map("event_id")
+  kioskId        String    @map("kiosk_id")
+  sessionId      String?   @map("session_id")
+  appVersion     String?   @map("app_version")
+  schemaVersion  Int?      @map("schema_version")
+  occurredAt     DateTime  @map("occurred_at")
+  seq            Int?
+  eventType      String    @map("event_type")
+  category       String?
+  binId          String?   @map("bin_id")
+  item           String?
+  confidence     Float?
+  language       String?
+  material       String?
+  massG          Float?    @map("mass_g")
+  massBasis      String?   @map("mass_basis")
+  co2Factor      Float?    @map("co2_factor")
+  co2Kg          Float?    @map("co2_kg")
+  diverted       Boolean   @default(false)
+  fillLevelAfter Int?      @map("fill_level_after")
+  syncedAt       DateTime? @map("synced_at")
+  syncState      Int?      @map("sync_state")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  kiosk Kiosk? @relation(fields: [kioskId], references: [kioskId], onDelete: Cascade)
+
+  @@index([kioskId])
+  @@index([sessionId])
+  @@index([eventType])
+  @@index([occurredAt])
+  @@map("kiosk_telemetry_events")
+}
+
 
 model SimulationSession {
   id             String    @id @default(uuid())

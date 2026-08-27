@@ -18,7 +18,12 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { SortingService } from './sorting.service';
-import { ClassifyDto, KioskHeartbeatDto, SortingEventQueryDto } from './dto';
+import {
+  ClassifyDto,
+  KioskHeartbeatDto,
+  SortingEventQueryDto,
+  KioskExportPayloadDto,
+} from './dto';
 import { KioskAuthGuard } from './guards/kiosk-auth.guard';
 import { JwtAuthGuard } from '../auth/guards';
 import { Public } from '../auth/decorators/public.decorator';
@@ -30,6 +35,47 @@ import { UserRole } from '@prisma/client';
 @Controller()
 export class SortingController {
   constructor(private readonly sortingService: SortingService) {}
+
+  // ─── CUSTOM SCHEMA V2 KIOSK EXPORT INGEST (TEST ENDPOINT) ───
+
+  @Post('sorting/kiosk-export')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Ingest Schema v2 AI Kiosk JSON Export Payload (Test Endpoint)',
+    description:
+      'Stores custom AI kiosk sorting export logs in the database for admin viewing.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Kiosk export payload ingested successfully',
+  })
+  async ingestKioskExport(@Body() dto: KioskExportPayloadDto) {
+    return this.sortingService.ingestKioskExportPayload(dto);
+  }
+
+  @Get('sorting/kiosk-telemetry')
+  @Public()
+  @ApiOperation({
+    summary: 'Query raw kiosk telemetry logs directly from DB',
+    description:
+      'Retrieves schema v2 telemetry events directly stored in database.',
+  })
+  async getKioskTelemetry(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('kioskId') kioskId?: string,
+    @Query('eventType') eventType?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.sortingService.getKioskTelemetryEvents({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      kioskId,
+      eventType,
+      search,
+    });
+  }
 
   // ─── CLASSIFY TELEMETRY ──────────────────────────
 
