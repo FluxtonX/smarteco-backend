@@ -1,6 +1,6 @@
 // ─── App Constants ───────────────────────────────
 
-export const APP_NAME = 'SmartEco';
+export const APP_NAME = 'SmartEco AI';
 export const API_PREFIX = 'api/v1';
 export const SWAGGER_PATH = '/api/docs';
 
